@@ -2,7 +2,7 @@ use unicode_width::*;
 use term::terminfo::TermInfo;
 
 use std::collections::HashMap;
-use std::borrow::{Borrow, Cow};
+use std::borrow::{Borrow, Cow, IntoCow};
 use std::fmt::Write;
 
 use bis_c::*;
@@ -173,8 +173,7 @@ impl UI {
                 self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!("")))
     }
 
-    pub fn input_char<T: Into<String>>(&self, query_item: T, chr: char) -> Result<(String, String), bool> {
-        let mut query = query_item.into();
+    pub fn input_char(&self, query: Cow<'static, str>, chr: char) -> Result<(Cow<'static, str>, String), bool> {
         if chr.is_control() {
             match chr {
                 EOT => {
@@ -189,7 +188,7 @@ impl UI {
                                          .unwrap_or(format!("")),
                                          self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!("")));
 
-                    Ok((format!(""), output))
+                    Ok(("".into_cow(), output))
                 },
                 '\n' => {
                     // exit
@@ -201,16 +200,17 @@ impl UI {
                     Ok((query, format!("\u{7}")))
                 }
             }
-        } else if UnicodeWidthStr::width(query.as_str()) + UnicodeWidthStr::width(PROMPT) +
+        } else if UnicodeWidthStr::width(query.as_ref()) + UnicodeWidthStr::width(PROMPT) +
             UnicodeWidthChar::width(chr).unwrap_or(0) >= self.cols as usize
         {
             // don't allow users to type past the end of one line
-            Ok((format!(""), format!("\u{7}")))
+            Ok(("".into_cow(), format!("\u{7}")))
         } else {
             // output the character and clear the screen
+            let mut query = query.into_owned();
             query.push(chr);
 
-            Ok((query,
+            Ok((query.into_cow(),
                 format!("{}{}{}", chr,
                         self.get_string(format!("sc"), vec![]).unwrap_or(format!("")),
                         self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!(""))

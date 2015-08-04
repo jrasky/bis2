@@ -62,7 +62,7 @@ fn main() {
     let ui = UI::create().expect("Failed to create UI instance");
 
     let (emit, events) = mpsc::channel();
-    let mut query = String::default();
+    let mut query = String::default().into_cow();
     let mut search = None;
     let mut success = false;
     let mut best_match = None;
@@ -110,7 +110,7 @@ fn main() {
 
                         // don't search until we have a search base
                         search.clone().and_then(|base| {
-                            let query = query.clone().into_cow();
+                            let query = query.clone();
                             let emit = emit.clone();
 
                             Some(thread::spawn(move || {
