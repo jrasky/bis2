@@ -4,9 +4,9 @@ use term::terminfo::TermInfo;
 use std::collections::HashMap;
 use std::borrow::{Borrow, Cow, IntoCow};
 use std::fmt::Write;
+use std::iter::FromIterator;
 
 use bis_c::*;
-use types::*;
 use constants::*;
 use error::*;
 
@@ -169,8 +169,15 @@ impl UI {
     }
 
     pub fn render_best_match<T: AsRef<str>>(&self, query: T) -> String {
-        format!("{}{}{}\n", FINISH, query.as_ref(),
+        format!("{}{}\n{}", FINISH, query.as_ref(),
                 self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!("")))
+    }
+
+    pub fn render_prompt(&self) -> String {
+        format!("{}{}{}{}", String::from_iter(vec!['\n'; MATCH_NUMBER].into_iter()),
+                self.get_string(format!("cuu"), vec![TermStack::Int(MATCH_NUMBER as isize)]).unwrap_or(format!("")),
+                PROMPT,
+                self.get_string(format!("sc"), vec![]).unwrap_or(format!("")))
     }
 
     pub fn input_char(&self, query: Cow<'static, str>, chr: char) -> Result<(Cow<'static, str>, String), bool> {

@@ -118,6 +118,12 @@ impl LineInfo {
                 break;
             }
 
+            if !c.is_whitespace() {
+                if cur_class == CharClass::First {
+                    cs_score += FIRST_FACTOR;
+                }
+            }
+
             if c.is_whitespace() {
                 cur_class = CharClass::Whitespace;
                 ws_score = WHITESPACE_FACTOR;
@@ -127,28 +133,29 @@ impl LineInfo {
                     if !cs_change {
                         cs_score += CLASS_FACTOR;
                         cs_change = true;
-                    } else {
-                        cs_change = false;
-                    }
+                    } 
+                } else {
+                    cs_change = false;
                 }
             } else if c.is_alphabetic() {
                 if cur_class != CharClass::Alphabetic {
-                    cur_class = CharClass::Numeric;
+                    cur_class = CharClass::Alphabetic;
                     if !cs_change {
                         cs_score += CLASS_FACTOR;
                         cs_change = true;
-                    } else {
-                        cs_change =  false;
                     }
+                } else {
+                    cs_change =  false;
                 }
             } else {
                 if cur_class != CharClass::Other {
+                    cur_class = CharClass::Other;
                     if !cs_change {
                         cs_score += CLASS_FACTOR;
                         cs_change = true;
-                    } else {
-                        cs_change = false;
                     }
+                } else {
+                    cs_change = false;
                 }
             }
 
@@ -177,28 +184,38 @@ impl LineInfo {
         }
     }
 
-    fn get_positions(&self, item: char, after: usize) -> Option<Vec<usize>> {
-        match self.char_map.get(&item) {
-            None => None,
-            Some(list) => match list.binary_search(&after) {
-                Ok(idx) if idx + 1 < list.len() => Some(list[idx + 1..].to_vec()),
-                Err(idx) if idx < list.len() => Some(list[idx..].to_vec()),
-                _ => None
+    fn get_positions(&self, item: char, after: Option<usize>) -> Option<Vec<usize>> {
+        match after {
+            None => self.char_map.get(&item).map(|list| {list.to_vec()}),
+            Some(after) => {
+                match self.char_map.get(&item) {
+                    None => None,
+                    Some(list) => match list.binary_search(&after) {
+                        Ok(idx) if idx + 1 < list.len() => Some(list[idx + 1..].to_vec()),
+                        Err(idx) if idx < list.len() => Some(list[idx..].to_vec()),
+                        _ => None
+                    }
+                }
             }
         }
     }
 
     fn position_list<T: AsRef<str>>(&self, item: T) -> Option<Vec<Vec<usize>>> {
         let mut positions = vec![];
-        let mut last = 0;
+        let mut last = None;
 
         for c in item.as_ref().chars() {
+            if c.is_whitespace() {
+                // don't match whitespace
+                continue;
+            }
+
             match self.get_positions(c, last) {
                 None => return None,
                 Some(list) => {
                     last = match list.get(0) {
                         None => return None,
-                        Some(idx) => *idx
+                        Some(idx) => Some(*idx)
                     };
                     positions.push(list);
                 }
@@ -210,7 +227,8 @@ impl LineInfo {
 
     fn permute_positions(mut list: Vec<Vec<usize>>) -> Option<Vec<Vec<usize>>> {
         let mut result = vec![];
-        let mut buffer = vec![];
+
+        debug!("Position list: {:?}", list);
 
         match list.pop() {
             None => return None,
@@ -226,24 +244,13 @@ impl LineInfo {
                 None => break,
                 Some(base_list) => {
                     for list in result.iter_mut() {
-                        let compare = list.last().unwrap();
-                        for item in base_list.iter() {
-                            if item < compare {
-                                let mut new = base_list.clone();
-                                new.push(*item);
-                                buffer.push(new);
+                        let compare = *list.last().unwrap();
+                        for item in base_list.iter().rev() {
+                            if *item < compare {
+                                list.push(*item);
                             }
                         }
                     }
-
-                    if buffer.is_empty() {
-                        return None;
-                    }
-
-                    let temp = result;
-                    result = buffer;
-                    buffer = temp;
-                    buffer.clear();
                 }
             }
         }
@@ -258,15 +265,20 @@ impl LineInfo {
     fn score_position(&self, position: Vec<usize>) -> isize {
         let avg_dist: usize;
 
+        debug!("Scoring position: {:?}", position);
+
         if position.len() < 2 {
             avg_dist = 0;
         } else {
-            avg_dist = position.windows(2).map(|pair| {pair[0] - pair[1]}).sum::<usize>() / position.len();
+            avg_dist = position.windows(2).map(|pair| {
+                trace!("Window: {:?}", pair);
+                pair[0] - pair[1]
+            }).sum::<usize>() / position.len();
         }
 
         let heat_sum: isize = position.iter().map(|idx| {self.heat_map[*idx]}).sum();
 
-        avg_dist as isize * DIST_WEIGHT + heat_sum * HEAT_WEIGHT
+        avg_dist as isize * DIST_WEIGHT + heat_sum * HEAT_WEIGHT + self.factor / FACTOR_REDUCE
     }
 
     fn best_position(&self, positions: Vec<Vec<usize>>) -> Option<isize> {

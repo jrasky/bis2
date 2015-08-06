@@ -1,6 +1,6 @@
 use std::io::prelude::*;
 
-use std::io::{Stdin, Stdout, Chars};
+use std::io::Stdout;
 
 use std::io;
 
@@ -8,7 +8,6 @@ use error::*;
 use bis_c::*;
 
 pub struct Terminal {
-    input: Chars<Stdin>,
     output: Stdout
 }
 
@@ -21,11 +20,9 @@ impl Drop for Terminal {
 impl Terminal {
     pub fn create() -> StrResult<Terminal> {
         let output = io::stdout();
-        let input = io::stdin().chars();
 
         match prepare_terminal() {
             Ok(_) => Ok(Terminal {
-                input: input,
                 output: output
             }),
             Err(e) => errs!(e, "Failed to prepare terminal")
@@ -36,14 +33,6 @@ impl Terminal {
         match write!(self.output, "{}", s.as_ref()) {
             Ok(_) => Ok(()),
             Err(err) => errs!(err, "Failed to write str to output")
-        }
-    }
-
-    pub fn input_char(&mut self) -> StrResult<Option<char>> {
-        match self.input.next() {
-            None => Ok(None),
-            Some(Ok(chr)) => Ok(Some(chr)),
-            Some(Err(err)) => errs!(err, "Failed to read character from input")
         }
     }
 
