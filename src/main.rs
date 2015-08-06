@@ -127,6 +127,9 @@ fn main() {
     // draw the prompt
     terminal.output_str(ui.render_prompt()).expect("Failed to render prompt");
 
+    // flush the terminal
+    terminal.flush().expect("Failed to flush terminal");
+
     loop {
         match events.recv() {
             Err(_) => break,
