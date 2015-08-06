@@ -202,10 +202,11 @@ impl UI {
                 },
                 CTRL_U => {
                     // create our output
-                    let output = format!("{}{}",
+                    let output = format!("{}{}{}",
                                          self.get_string(format!("cub"),
                                                          vec![TermStack::Int(query.len() as isize)])
                                          .unwrap_or(format!("")),
+                                         self.get_string(format!("sc"), vec![]).unwrap_or(format!("")),
                                          self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!("")));
 
                     query.clear();

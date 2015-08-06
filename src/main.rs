@@ -106,6 +106,17 @@ fn read_signals(emit: Sender<Event>) {
     });
 }
 
+fn start_query(emit: Sender<Event>, base: Arc<SearchBase>, query: String) {
+    thread::spawn(move || {
+        let result = base.query(&query);
+        emit.send(Event::Match(result, query)).and_then(|_| {
+            trace!("Finished query");
+            Ok(())
+        }).is_ok();
+        // don't panic on fail send, events might be already closed
+    });
+}
+
 fn main() {
     // init logging
     env_logger::init().expect("Failed to initialize logging");
@@ -150,6 +161,10 @@ fn main() {
                 match event {
                     Event::SearchReady(base) => {
                         search = Some(Arc::new(base));
+                        // execute a query if it isn't empty
+                        if !query.is_empty() {
+                            search.clone().map(|base| {start_query(emit.clone(), base, query.clone())});
+                        }
                     },
                     Event::Input(chr) => {
                         debug!("Got input event: {:?}", chr);
@@ -166,19 +181,7 @@ fn main() {
                         };
 
                         // don't search until we have a search base
-                        search.clone().map(|base| {
-                            let query = query.clone();
-                            let emit = emit.clone();
-
-                            thread::spawn(move || {
-                                let result = base.query(&query);
-                                emit.send(Event::Match(result, query)).and_then(|_| {
-                                    trace!("Finished query");
-                                    Ok(())
-                                }).is_ok();
-                                // don't panic on fail send, events might be already closed
-                            });
-                        });
+                        search.clone().map(|base| {start_query(emit.clone(), base, query.clone())});
                     },
                     Event::Match(matches, q) => {
                         debug!("Got match event: {:?}, {:?}", matches, q);
