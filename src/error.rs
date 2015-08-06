@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Debug, Formatter};
 use std::error::Error;
 use std::borrow::Borrow;
 
@@ -15,7 +15,6 @@ macro_rules! errs {
 
 pub type StrResult<T> = Result<T, StrError>;
 
-#[derive(Debug)]
 pub struct StrError {
     description: String,
     cause: Option<Box<Error>>
@@ -23,7 +22,19 @@ pub struct StrError {
 
 impl Display for StrError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        try!(write!(f, "{}", self.description()));
+        match self.cause() {
+            None => Ok(()),
+            Some(error) => {
+                write!(f, ": {}", error)
+            }
+        }
+    }
+}
+
+impl Debug for StrError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        Display::fmt(self, f)
     }
 }
 
