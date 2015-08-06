@@ -19,6 +19,7 @@ use search::SearchBase;
 pub enum Event {
     SearchReady(SearchBase),
     Input(char),
-    Match(Vec<Arc<String>>, String),
+    Query(String),
+    Match(Vec<Arc<String>>, Arc<String>),
     Quit(bool)
 }

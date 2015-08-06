@@ -19,10 +19,12 @@ use std::borrow::Borrow;
 use std::fmt::Write;
 use std::iter::FromIterator;
 use std::sync::Arc;
+use std::sync::mpsc::Sender;
 
 use bis_c::*;
 use constants::*;
 use error::*;
+use types::*;
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum TermStack {
@@ -39,7 +41,8 @@ pub enum TermStack {
 pub struct UI {
     rows: u16,
     cols: u16,
-    strings: HashMap<String, String>
+    strings: HashMap<String, String>,
+    control: HashMap<String, Option<String>>
 }
 
 impl UI {
@@ -50,12 +53,24 @@ impl UI {
         };
 
         let mut strings = HashMap::default();
+        let mut control = HashMap::default();
 
         for (name, value) in info.strings.into_iter() {
-            strings.insert(name, match String::from_utf8(value) {
+            let strvalue = match String::from_utf8(value) {
                 Ok(s) => s,
                 Err(e) => return errs!(e, "failed to convert value to String")
-            });
+            };
+
+            // we only care about cuu1 and cud1
+            if strvalue == "cuu1" {
+                for i in 1..strvalue.len() - 1 {
+                    control.entry(strvalue[0..i].to_owned()).or_insert(None);
+                }
+                
+                control.insert(strvalue.clone(), Some(name.clone()));
+            }
+
+            strings.insert(name, strvalue);
         }
 
         let (rows, cols) = match get_terminal_size() {
@@ -66,7 +81,8 @@ impl UI {
         Ok(UI {
             rows: rows,
             cols: cols,
-            strings: strings
+            strings: strings,
+            control: control
         })
     }
 
@@ -155,10 +171,19 @@ impl UI {
         Some(result)
     }
     
-    pub fn render_matches(&self, matches: Vec<Arc<String>>) -> String {
+    pub fn render_matches(&self, matches: Vec<Arc<String>>, number: usize) -> String {
         let mut result = format!("");
 
-        for item in matches.into_iter() {
+        for (idx, item) in matches.into_iter().enumerate() {
+            // write the pre
+            if idx == number {
+                write!(result, "{}{}",
+                       MATCH_PRE, MATCH_SELECT).expect("Failed to write pre to result");
+            } else {
+                write!(result, "{}",
+                       MATCH_PRE).expect("Failed to write pre to result");
+            }
+
             if UnicodeWidthStr::width(item.as_str()) > self.cols as usize {
                 let mut owned = (*item).clone();
                 while UnicodeWidthStr::width(owned.as_str()) > self.cols as usize {
@@ -167,10 +192,10 @@ impl UI {
                 }
 
                 // draw the item
-                write!(result, "\n{}", owned).expect("Writes to strings should not fail");
+                write!(result, "{}", owned).expect("Writes to strings should not fail");
             } else {
                 // draw the item
-                write!(result, "\n{}", item).expect("Writes to strings should not fail");
+                write!(result, "{}", item).expect("Writes to strings should not fail");
             }
         }
 
@@ -193,49 +218,49 @@ impl UI {
                 self.get_string(format!("sc"), vec![]).unwrap_or(format!("")))
     }
 
-    pub fn input_char(&self, mut query: String, chr: char) -> Result<(String, String), bool> {
+    pub fn input_char<T: AsRef<str>>(&self, emit: Sender<Event>, query: T, chr: char) -> String {
         if chr.is_control() {
             match chr {
                 EOT => {
                     // stop
-                    Err(false)
+                    emit.send(Event::Quit(false)).expect("Failed to send quit signal");
+                    format!("")
                 },
                 CTRL_U => {
                     // create our output
                     let output = format!("{}{}{}",
                                          self.get_string(format!("cub"),
-                                                         vec![TermStack::Int(query.len() as isize)])
+                                                         vec![TermStack::Int(query.as_ref().len() as isize)])
                                          .unwrap_or(format!("")),
                                          self.get_string(format!("sc"), vec![]).unwrap_or(format!("")),
                                          self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!("")));
 
-                    query.clear();
-                    Ok((query, output))
+                    emit.send(Event::Query(format!(""))).expect("Failed to send query signal");
+                    output
                 },
                 '\n' => {
                     // exit
-                    Err(true)
+                    emit.send(Event::Quit(true)).expect("Failed to send quit signal");
+                    format!("")
                 },
                 _ => {
                     // unknown character
                     // \u{7} is BEL
-                    Ok((query, format!("\u{7}")))
+                    format!("\u{7}")
                 }
             }
-        } else if UnicodeWidthStr::width(query.as_str()) + UnicodeWidthStr::width(PROMPT) +
+        } else if UnicodeWidthStr::width(query.as_ref()) + UnicodeWidthStr::width(PROMPT) +
             UnicodeWidthChar::width(chr).unwrap_or(0) >= self.cols as usize
         {
             // don't allow users to type past the end of one line
-            Ok((query, format!("\u{7}")))
+            format!("\u{7}")
         } else {
             // output the character and clear the screen
-            query.push(chr);
+            emit.send(Event::Query(format!("{}{}", query.as_ref(), chr))).expect("Failed to send query signal");
 
-            Ok((query,
-                format!("{}{}{}", chr,
-                        self.get_string(format!("sc"), vec![]).unwrap_or(format!("")),
-                        self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!(""))
-                        )))
+            format!("{}{}{}", chr,
+                    self.get_string(format!("sc"), vec![]).unwrap_or(format!("")),
+                    self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!("")))
         }
     }
 }

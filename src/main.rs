@@ -33,7 +33,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::fs::File;
 use std::iter::FromIterator;
 use std::thread::JoinHandle;
-use std::ops::Deref;
+use std::borrow::Borrow;
 
 use std::sync::mpsc;
 use std::thread;
@@ -106,9 +106,9 @@ fn read_signals(emit: Sender<Event>) {
     });
 }
 
-fn start_query(emit: Sender<Event>, base: Arc<SearchBase>, query: String) {
+fn start_query(emit: Sender<Event>, base: Arc<SearchBase>, query: Arc<String>) {
     thread::spawn(move || {
-        let result = base.query(&query);
+        let result = base.query::<&String>(query.borrow());
         emit.send(Event::Match(result, query)).and_then(|_| {
             trace!("Finished query");
             Ok(())
@@ -130,11 +130,12 @@ fn main() {
     let ui = UI::create().expect("Failed to create UI instance");
 
     let (emit, events) = mpsc::channel();
-    let mut query = String::default();
+    let mut query = Arc::new(String::default());
     let mut search = None;
     let mut success = false;
     let mut best_match = None;
     let input_stop = Arc::new(AtomicBool::new(false));
+    let match_number = 0;
 
     // mask sigint
     bis_c::mask_sigint().expect("Failed to mask sigint");
@@ -166,29 +167,23 @@ fn main() {
                             search.clone().map(|base| {start_query(emit.clone(), base, query.clone())});
                         }
                     },
+                    Event::Query(q) => {
+                        query = Arc::new(q);
+                        if !query.is_empty() {
+                            search.clone().map(|base| {start_query(emit.clone(), base, query.clone())});
+                        }
+                    }
                     Event::Input(chr) => {
                         debug!("Got input event: {:?}", chr);
-                        query = match ui.input_char(query, chr) {
-                            Err(s) => {
-                                success = s;
-                                // quit out of the event loop
-                                break;
-                            },
-                            Ok((q, out)) => {
-                                terminal.output_str(out).expect("Failed to write to output");
-                                q
-                            }
-                        };
-
-                        // don't search until we have a search base
-                        search.clone().map(|base| {start_query(emit.clone(), base, query.clone())});
+                        terminal.output_str(ui.input_char::<&String>(emit.clone(), query.borrow(), chr))
+                            .expect("Failed to write output");
                     },
                     Event::Match(matches, q) => {
                         debug!("Got match event: {:?}, {:?}", matches, q);
                         if q == query {
                             best_match = matches.first().cloned();
                             // only draw matches for the current query
-                            terminal.output_str(ui.render_matches(matches)).expect("Failed to draw matches");
+                            terminal.output_str(ui.render_matches(matches, match_number)).expect("Failed to draw matches");
                         }
                     },
                     Event::Quit(s) => {
@@ -216,7 +211,7 @@ fn main() {
     // draw the best match if it exists
     match best_match {
         Some(ref m) => {
-            terminal.output_str(ui.render_best_match(Deref::deref(m)))
+            terminal.output_str(ui.render_best_match::<&String>(m.borrow()))
                 .expect("Failed to draw best match");
         },
         None => {
@@ -230,7 +225,7 @@ fn main() {
     if success {
         match best_match {
             Some(ref m) => {
-                terminal.insert_input(Deref::deref(m))
+                terminal.insert_input::<&String>(m.borrow())
                     .expect("Failed to insert input");
             },
             None => {}

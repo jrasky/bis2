@@ -30,3 +30,5 @@ pub const CTRL_U: char = '\u{15}';
 
 pub const PROMPT: &'static str = "Match: ";
 pub const FINISH: &'static str = " -> ";
+pub const MATCH_SELECT: &'static str = "-> ";
+pub const MATCH_PRE: &'static str = "\n";
