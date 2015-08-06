@@ -201,14 +201,13 @@ impl LineInfo {
         match after {
             None => self.char_map.get(&item).map(|list| {list.to_vec()}),
             Some(after) => {
-                match self.char_map.get(&item) {
-                    None => None,
-                    Some(list) => match list.binary_search(&after) {
+                self.char_map.get(&item).and_then(|list| {
+                    match list.binary_search(&after) {
                         Ok(idx) if idx + 1 < list.len() => Some(list[idx + 1..].to_vec()),
                         Err(idx) if idx < list.len() => Some(list[idx..].to_vec()),
                         _ => None
                     }
-                }
+                })
             }
         }
     }
