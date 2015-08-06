@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::sync::Arc;
 
 use search::SearchBase;
 
@@ -6,6 +6,6 @@ use search::SearchBase;
 pub enum Event {
     SearchReady(SearchBase),
     Input(char),
-    Match(Vec<Cow<'static, str>>, Cow<'static, str>),
+    Match(Vec<Arc<String>>, String),
     Quit(bool)
 }

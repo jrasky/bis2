@@ -1,7 +1,7 @@
 use std::collections::{HashMap, BinaryHeap};
-use std::borrow::{Cow, IntoCow};
 use std::cmp::Ordering;
 use std::iter::FromIterator;
+use std::sync::Arc;
 
 use constants::*;
 
@@ -16,7 +16,7 @@ enum CharClass {
 
 #[derive(Debug)]
 pub struct LineInfo {
-    line: Cow<'static, str>,
+    line: Arc<String>,
     char_map: HashMap<char, Vec<usize>>,
     heat_map: Vec<isize>,
     factor: isize
@@ -26,7 +26,7 @@ pub struct LineInfo {
 pub struct LineMatch {
     score: isize,
     factor: isize,
-    line: Cow<'static, str>
+    line: Arc<String>
 }
 
 #[derive(Debug)]
@@ -66,7 +66,7 @@ impl FromIterator<LineInfo> for SearchBase {
 }
 
 impl SearchBase {
-    pub fn query<T: AsRef<str>>(&self, query: T) -> Vec<Cow<'static, str>> {
+    pub fn query<T: AsRef<str>>(&self, query: T) -> Vec<Arc<String>> {
         if query.as_ref().is_empty() {
             // an empty query means don't match anything
             return vec![];
@@ -103,10 +103,10 @@ impl SearchBase {
 }
 
 impl LineInfo {
-    pub fn new<T: IntoCow<'static, str>>(item: T, factor: isize) -> LineInfo {
+    pub fn new<T: Into<String>>(item: T, factor: isize) -> LineInfo {
         let mut map: HashMap<char, Vec<usize>> = HashMap::new();
         let mut heat = vec![];
-        let line = item.into_cow();
+        let line = Arc::new(item.into());
 
         let mut ws_score = 0isize;
         let mut cs_score = 0isize;

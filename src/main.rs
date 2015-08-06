@@ -3,7 +3,6 @@
 #![feature(result_expect)]
 #![feature(convert)]
 #![feature(iter_arith)]
-#![feature(into_cow)]
 #![feature(io)]
 extern crate unicode_width;
 extern crate term;
@@ -15,13 +14,13 @@ extern crate env_logger;
 use std::io::prelude::*;
 
 use std::io::BufReader;
-use std::borrow::IntoCow;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::fs::File;
 use std::iter::FromIterator;
 use std::thread::JoinHandle;
+use std::ops::Deref;
 
 use std::sync::mpsc;
 use std::thread;
@@ -107,7 +106,7 @@ fn main() {
     let ui = UI::create().expect("Failed to create UI instance");
 
     let (emit, events) = mpsc::channel();
-    let mut query = String::default().into_cow();
+    let mut query = String::default();
     let mut search = None;
     let mut success = false;
     let mut best_match = None;
@@ -151,18 +150,18 @@ fn main() {
                         };
 
                         // don't search until we have a search base
-                        search.clone().and_then(|base| {
+                        search.clone().map(|base| {
                             let query = query.clone();
                             let emit = emit.clone();
 
-                            Some(thread::spawn(move || {
-                                let result = base.query(query.clone());
+                            thread::spawn(move || {
+                                let result = base.query(&query);
                                 emit.send(Event::Match(result, query)).and_then(|_| {
                                     trace!("Finished query");
                                     Ok(())
                                 }).is_ok();
                                 // don't panic on fail send, events might be already closed
-                            }))
+                            });
                         });
                     },
                     Event::Match(matches, q) => {
@@ -198,7 +197,7 @@ fn main() {
     // draw the best match if it exists
     match best_match {
         Some(ref m) => {
-            terminal.output_str(ui.render_best_match(m))
+            terminal.output_str(ui.render_best_match(Deref::deref(m)))
                 .expect("Failed to draw best match");
         },
         None => {
@@ -212,7 +211,7 @@ fn main() {
     if success {
         match best_match {
             Some(ref m) => {
-                terminal.insert_input(m)
+                terminal.insert_input(Deref::deref(m))
                     .expect("Failed to insert input");
             },
             None => {}

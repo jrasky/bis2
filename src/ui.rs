@@ -2,9 +2,10 @@ use unicode_width::*;
 use term::terminfo::TermInfo;
 
 use std::collections::HashMap;
-use std::borrow::{Borrow, Cow, IntoCow};
+use std::borrow::Borrow;
 use std::fmt::Write;
 use std::iter::FromIterator;
+use std::sync::Arc;
 
 use bis_c::*;
 use constants::*;
@@ -96,7 +97,6 @@ impl UI {
                             error!("Stack was empty on print");
                         }
                     }
-
                     escaped = false;
                 } else if c == 'p' {
                     escape.push('p');
@@ -142,12 +142,12 @@ impl UI {
         Some(result)
     }
     
-    pub fn render_matches(&self, matches: Vec<Cow<'static, str>>) -> String {
+    pub fn render_matches(&self, matches: Vec<Arc<String>>) -> String {
         let mut result = format!("");
 
         for item in matches.into_iter() {
-            if UnicodeWidthStr::width(item.as_ref()) > self.cols as usize {
-                let mut owned = item.into_owned();
+            if UnicodeWidthStr::width(item.as_str()) > self.cols as usize {
+                let mut owned = (*item).clone();
                 while UnicodeWidthStr::width(owned.as_str()) > self.cols as usize {
                     // truncade long lines
                     owned.pop();
@@ -180,7 +180,7 @@ impl UI {
                 self.get_string(format!("sc"), vec![]).unwrap_or(format!("")))
     }
 
-    pub fn input_char(&self, query: Cow<'static, str>, chr: char) -> Result<(Cow<'static, str>, String), bool> {
+    pub fn input_char(&self, mut query: String, chr: char) -> Result<(String, String), bool> {
         if chr.is_control() {
             match chr {
                 EOT => {
@@ -195,7 +195,8 @@ impl UI {
                                          .unwrap_or(format!("")),
                                          self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!("")));
 
-                    Ok(("".into_cow(), output))
+                    query.clear();
+                    Ok((query, output))
                 },
                 '\n' => {
                     // exit
@@ -207,17 +208,16 @@ impl UI {
                     Ok((query, format!("\u{7}")))
                 }
             }
-        } else if UnicodeWidthStr::width(query.as_ref()) + UnicodeWidthStr::width(PROMPT) +
+        } else if UnicodeWidthStr::width(query.as_str()) + UnicodeWidthStr::width(PROMPT) +
             UnicodeWidthChar::width(chr).unwrap_or(0) >= self.cols as usize
         {
             // don't allow users to type past the end of one line
-            Ok(("".into_cow(), format!("\u{7}")))
+            Ok((query, format!("\u{7}")))
         } else {
             // output the character and clear the screen
-            let mut query = query.into_owned();
             query.push(chr);
 
-            Ok((query.into_cow(),
+            Ok((query,
                 format!("{}{}{}", chr,
                         self.get_string(format!("sc"), vec![]).unwrap_or(format!("")),
                         self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!(""))
