@@ -86,7 +86,7 @@ impl UI {
         })
     }
 
-    pub fn get_string<T: Borrow<String>>(&self, name: T, params: Vec<TermStack>) -> Option<String> {
+    fn get_string<T: Borrow<String>>(&self, name: T, params: Vec<TermStack>) -> Option<String> {
         // only implement what we're actually using in the UI
         let sequence = match self.strings.get(name.borrow()) {
             None => {
