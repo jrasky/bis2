@@ -18,7 +18,7 @@ use std::borrow::Borrow;
 use std::fmt;
 
 macro_rules! errs {
-    ($expr:expr, $($arg: tt)*) => ({
+    ($expr: expr, $($arg: tt)*) => ({
         $crate::std::result::Result::Err(
             $crate::error::StrError::new(format!($($arg)*),
                                          $crate::std::option::Option::Some(
@@ -26,8 +26,16 @@ macro_rules! errs {
     })
 }
 
+macro_rules! trys {
+    ($expr: expr, $($arg: tt)*) => (match expr {
+        $crate::std::result::Result::Ok(v) => v,
+        $crate::std::result::Result::Err(e) => return errs!(e, $($arg)*)
+    })
+}
+
 pub type StrResult<T> = Result<T, StrError>;
 
+#[derive(Debug)]
 pub struct StrError {
     description: String,
     cause: Option<Box<Error>>
@@ -42,12 +50,6 @@ impl Display for StrError {
                 write!(f, ": {}", error)
             }
         }
-    }
-}
-
-impl Debug for StrError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        Display::fmt(self, f)
     }
 }
 

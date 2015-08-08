@@ -27,6 +27,8 @@ pub struct Terminal {
 impl Drop for Terminal {
     fn drop(&mut self) {
         restore_terminal().expect("Failed to restore terminal");
+
+        // signal masking is per-thread, so we don't need to unmask it on exit
     }
 }
 
@@ -34,26 +36,24 @@ impl Terminal {
     pub fn create() -> StrResult<Terminal> {
         let output = io::stdout();
 
-        match prepare_terminal() {
-            Ok(_) => Ok(Terminal {
-                output: output
-            }),
-            Err(e) => errs!(e, "Failed to prepare terminal")
-        }
+        trys!(prepare_terminal(), "Failed to prepare terminal");
+
+        trys!(mask_sigint(), "Failed to mask sigint");
+
+        Ok(Terminal {
+            output: output
+        })
     }
 
     pub fn output_str<T: AsRef<str>>(&mut self, s: T) -> StrResult<()> {
-        match write!(self.output, "{}", s.as_ref()) {
-            Ok(_) => Ok(()),
-            Err(err) => errs!(err, "Failed to write str to output")
-        }
+        trys!(write!(self.output, "{}", s.as_ref()), "Failed to write str to output")
     }
 
     pub fn flush(&mut self) -> StrResult<()> {
-        self.output.flush().or_else(|err| {errs!(err, "Failed to flush output")})
+        trys!(self.output.flush(), "Failed to flush output")
     }
 
     pub fn insert_input<T: AsRef<str>>(&mut self, input: T) -> StrResult<()> {
-        insert_input(input.as_ref()).or_else(|err| {errs!(err, "Failed to insert input")})
+        trys!(insert_input(input.as_ref()), "Failed to insert input")
     }
 }
