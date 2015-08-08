@@ -46,14 +46,14 @@ impl Terminal {
     }
 
     pub fn output_str<T: AsRef<str>>(&mut self, s: T) -> StrResult<()> {
-        trys!(write!(self.output, "{}", s.as_ref()), "Failed to write str to output")
+        Ok(trys!(write!(self.output, "{}", s.as_ref()), "Failed to write str to output"))
     }
 
     pub fn flush(&mut self) -> StrResult<()> {
-        trys!(self.output.flush(), "Failed to flush output")
+        Ok(trys!(self.output.flush(), "Failed to flush output"))
     }
 
     pub fn insert_input<T: AsRef<str>>(&mut self, input: T) -> StrResult<()> {
-        trys!(insert_input(input.as_ref()), "Failed to insert input")
+        Ok(trys!(insert_input(input.as_ref()), "Failed to insert input"))
     }
 }

@@ -1,4 +1,24 @@
-struct EventLoop {
+
+use std::io::prelude::*;
+
+use std::sync::Arc;
+use std::sync::mpsc::{Sender, Receiver};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::JoinHandle;
+use std::borrow::Borrow;
+
+use std::sync::mpsc;
+use std::thread;
+
+use ui::UI;
+use terminal::Terminal;
+use search::SearchBase;
+use threads;
+
+use error::*;
+use types::*;
+
+pub struct EventLoop {
     emit: Sender<Event>,
     events: Receiver<Event>,
     terminal: Terminal,
@@ -6,14 +26,14 @@ struct EventLoop {
 }
 
 impl EventLoop {
-    fn create() -> StrResult<EventLoop> {
+    pub fn create() -> StrResult<EventLoop> {
         let (emit, events) = mpsc::channel();
 
         Ok(EventLoop {
             emit: emit,
             events: events,
             terminal: trys!(Terminal::create(), "Failed to create terminal instance"),
-            ui: trys!(UI::create(), "Failed to create UI instance");
+            ui: trys!(UI::create(), "Failed to create UI instance")
         })
     }
 
@@ -48,7 +68,7 @@ impl EventLoop {
         (input_thread, input_stop)
     }
 
-    fn stop_threads(&mut self, input_thread: JoinHandle<()>, input_stop: Arc<AtomicBool>) {
+    fn stop_threads(&mut self, input_thread: JoinHandle<()>, input_stop: Arc<AtomicBool>) -> StrResult<()> {
         // prompt the input thread to stop
         input_stop.store(true, Ordering::Relaxed);
 
@@ -56,27 +76,36 @@ impl EventLoop {
         trys!(self.terminal.insert_input(" "), "Failed to insert bogus byte");
 
         // join the thread
-        trys!(input_thread.join(), "Failed to wait for input thread");
+        input_thread.join().or_else(|e| {errs!(StrError::from_any(e), "Failed to wait for input thread")})
     }
 
-    fn run(&mut self) -> StrResult<()> {
+    fn start_query(&self, search: Option<Arc<SearchBase>>, query: Arc<String>) {
+        search.map(|base| {
+            let emit = self.emit.clone();
+            thread::spawn(move || {
+                threads::start_query(emit, base, query);
+            });
+        });
+    }
+
+    pub fn run(&mut self) -> StrResult<()> {
         // start the threads
         let (input_thread, input_stop) = self.start_threads();
 
         // draw the prompt
-        trys!(terminal.output_str(ui.render_prompt(), "Failed to render prompt"));
+        trys!(self.terminal.output_str(self.ui.render_prompt()), "Failed to render prompt");
 
         // flush the terminal
-        trys!(terminal.flush(), "Failed to flush terminal");
+        trys!(self.terminal.flush(), "Failed to flush terminal");
 
         let mut query = Arc::new(format!(""));
-        let best_match = None;
-        let search = None;
-        let success = false;
+        let mut best_match = None;
+        let mut search = None;
+        let mut success = false;
         let match_number = 0;
 
         loop {
-            match events.recv() {
+            match self.events.recv() {
                 Err(_) => break,
                 Ok(event) => {
                     match event {
@@ -84,18 +113,21 @@ impl EventLoop {
                             search = Some(Arc::new(base));
                             // execute a query if it isn't empty
                             if !query.is_empty() {
-                                search.clone().map(|base| {start_query(emit.clone(), base, query.clone())});
+                                self.start_query(search.clone(), query.clone());
                             }
                         },
                         Event::Query(q) => {
                             query = Arc::new(q);
                             if !query.is_empty() {
-                                search.clone().map(|base| {start_query(emit.clone(), base, query.clone())});
+                                self.start_query(search.clone(), query.clone());
+                            } else {
+                                best_match = None;
                             }
                         }
                         Event::Input(chr) => {
                             debug!("Got input event: {:?}", chr);
-                            trys!(terminal.output_str(ui.input_char::<&String>(emit.clone(), query.borrow(), chr)),
+                            trys!(self.terminal.output_str(self.ui.input_char::<&String>(
+                                self.emit.clone(), query.borrow(), chr)),
                                   "Failed to write output");
                         },
                         Event::Match(matches, q) => {
@@ -103,7 +135,7 @@ impl EventLoop {
                             if q == query {
                                 best_match = matches.first().cloned();
                                 // only draw matches for the current query
-                                trys!(terminal.output_str(ui.render_matches(matches, match_number)),
+                                trys!(self.terminal.output_str(self.ui.render_matches(matches, match_number)),
                                       "Failed to draw matches");
                             }
                         },
@@ -115,33 +147,38 @@ impl EventLoop {
                     }
 
                     debug!("Flushing output");
-                    trys!(terminal.flush(), "Failed to flush terminal");
+                    trys!(self.terminal.flush(), "Failed to flush terminal");
                 }
             }
         }
 
         // stop the input thread
-        trys!(self.stop_threads(), "Failed to stop threads");
+        trys!(self.stop_threads(input_thread, input_stop), "Failed to stop threads");
 
         // draw the best match if it exists
         match best_match {
             Some(ref m) => {
-                trys!(self.terminal.output_str(ui.render_best_match::<&String>(m.borrow())),
+                trys!(self.terminal.output_str(self.ui.render_best_match::<&String>(m.borrow())),
                       "Failed to draw best match");
             },
             None => {
-                trys!(terminal.output_str("\n"), "Failed to draw newline");
+                trys!(self.terminal.output_str("\n"), "Failed to draw newline");
             }
         }
 
         debug!("Flushing output");
-        trys!(terminal.flush(), "Failed to flush terminal");
+        trys!(self.terminal.flush(), "Failed to flush terminal");
 
+        // insert the successful match onto the terminal input buffer
         if success {
-            best_match.map(|m| {
-                trys!(terminal.insert_input::<&String>(m.borrow()),
-                      "Failed to insert input");
-            });
+            try!(best_match.map_or(Ok(()), |m| {
+                self.terminal.insert_input::<&String>(m.borrow()).or_else(|e| {
+                    errs!(e, "Failed to insert input")
+                })
+            }));
         }
+
+        // success
+        Ok(())
     }
 }

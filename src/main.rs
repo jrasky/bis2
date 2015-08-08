@@ -11,6 +11,7 @@
 // WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied. See the
 // License for the specific language concerning governing permissions and
 // limitations under the License.
+#![feature(get_type_id)]
 #![feature(collections)]
 #![feature(cstr_to_str)]
 #![feature(result_expect)]
@@ -24,28 +25,9 @@ extern crate libc;
 extern crate log;
 extern crate env_logger;
 
-use std::io::prelude::*;
-
-use std::io::BufReader;
-use std::sync::Arc;
-use std::sync::mpsc::Sender;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::fs::File;
-use std::iter::FromIterator;
-use std::thread::JoinHandle;
-use std::borrow::Borrow;
-
-use std::sync::mpsc;
-use std::thread;
 use std::mem;
-use std::env;
-use std::io;
 
-use ui::UI;
-use terminal::Terminal;
-use search::{SearchBase, LineInfo};
-
-use types::*;
+use event_loop::EventLoop;
 
 mod constants;
 #[macro_use]
@@ -72,7 +54,7 @@ fn main() {
     // create the event loop
     let mut ev_loop = match EventLoop::create() {
         Ok(ev) => ev,
-        Err(e) => panic!("Failed to create event loop: {}")
+        Err(e) => panic!("Failed to create event loop: {}", e)
     };
 
     // run the event loop

@@ -1,4 +1,22 @@
-fn read_history(emit: Sender<Event>) {
+use std::io::prelude::*;
+
+use std::io::BufReader;
+use std::sync::Arc;
+use std::sync::mpsc::Sender;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::fs::File;
+use std::iter::FromIterator;
+use std::borrow::Borrow;
+
+use std::env;
+use std::io;
+
+use search::{SearchBase, LineInfo};
+use bis_c;
+
+use types::*;
+
+pub fn read_history(emit: Sender<Event>) {
     let history_path = env::var("HISTFILE").expect("Failed to get bash history file");
     let input_file = BufReader::new(File::open(history_path).expect("Cauld not open history file"));
     let mut count = -1;
@@ -11,7 +29,7 @@ fn read_history(emit: Sender<Event>) {
     emit.send(Event::SearchReady(base)).expect("Failed to emit search ready signal");
 }
 
-fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
+pub fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
     // this thread is joined on quit, so none of its sends should fail
     for maybe_chr in io::stdin().chars() {
         match maybe_chr {
@@ -31,7 +49,7 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
     }
 }
 
-fn read_signals(emit: Sender<Event>) {
+pub fn read_signals(emit: Sender<Event>) {
     // wait for a sigint
     bis_c::wait_sigint().expect("Failed to wait for sigint");
 
@@ -42,7 +60,7 @@ fn read_signals(emit: Sender<Event>) {
     // might happen after events is closed, so don't fail
 }
 
-fn start_query(emit: Sender<Event>, base: Arc<Searchbase>, query: Arc<String>) {
+pub fn start_query(emit: Sender<Event>, base: Arc<SearchBase>, query: Arc<String>) {
     let result = base.query::<&String>(query.borrow());
     emit.send(Event::Match(result, query)).and_then(|_| {
         trace!("Finished query");

@@ -251,17 +251,12 @@ impl LineInfo {
             }
         }
 
-        loop {
-            match list.pop() {
-                None => break,
-                Some(base_list) => {
-                    for list in result.iter_mut() {
-                        let compare = *list.last().unwrap();
-                        for item in base_list.iter().rev() {
-                            if *item < compare {
-                                list.push(*item);
-                            }
-                        }
+        for base_list in list.into_iter().rev() {
+            for list in result.iter_mut() {
+                let compare = *list.last().unwrap();
+                for item in base_list.iter().rev() {
+                    if *item < compare {
+                        list.push(*item);
                     }
                 }
             }

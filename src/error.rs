@@ -11,9 +11,10 @@
 // WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied. See the
 // License for the specific language concerning governing permissions and
 // limitations under the License.
-use std::fmt::{Display, Debug, Formatter};
+use std::fmt::{Display, Formatter};
 use std::error::Error;
 use std::borrow::Borrow;
+use std::any::Any;
 
 use std::fmt;
 
@@ -27,7 +28,7 @@ macro_rules! errs {
 }
 
 macro_rules! trys {
-    ($expr: expr, $($arg: tt)*) => (match expr {
+    ($expr: expr, $($arg: tt)*) => (match $expr {
         $crate::std::result::Result::Ok(v) => v,
         $crate::std::result::Result::Err(e) => return errs!(e, $($arg)*)
     })
@@ -72,5 +73,9 @@ impl StrError {
             description: description.into(),
             cause: cause
         }
+    }
+
+    pub fn from_any(item: Box<Any>) -> StrError {
+        StrError::new(format!("{:?}", item.get_type_id()), None)
     }
 }
