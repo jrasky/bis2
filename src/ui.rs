@@ -215,9 +215,9 @@ impl UI {
             // do nothing
         }
 
-        format!("{}\n{}{}{}{}", result,
+        format!("{}\n{}{}{}", result,
                 self.get_string(format!("clr_eol"), vec![]).unwrap_or(format!("")),
-                MATCH_SELECT, self.truncate_string(matches[number].clone()),
+                self.truncate_string(Arc::new(format!("{}{}", MATCH_SELECT, matches[number]))),
                 self.get_string(format!("rc"), vec![]).unwrap_or(format!("")))
     }
 
@@ -253,17 +253,20 @@ impl UI {
                 break;
             }
 
+            let item_string;
+
+            write!(result, "{}",
+                   MATCH_PRE).expect("Failed to write pre to result");
+
             // write the pre
             if idx == number {
-                write!(result, "{}{}",
-                       MATCH_PRE, MATCH_SELECT).expect("Failed to write pre to result");
+                item_string = Arc::new(format!("{}{}", MATCH_SELECT, item));
             } else {
-                write!(result, "{}",
-                       MATCH_PRE).expect("Failed to write pre to result");
+                item_string = item.clone();
             }
 
             // draw the item
-            write!(result, "{}", self.truncate_string(item.clone())).expect("Writes to strings should not fail");
+            write!(result, "{}", self.truncate_string(item_string)).expect("Writes to strings should not fail");
         }
 
         // restore the cursor
