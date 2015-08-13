@@ -169,6 +169,69 @@ impl UI {
         // return result
         Some(result)
     }
+
+    pub fn render_selection(&self, maybe_matches: Option<&[Arc<String>]>, number: usize, old: usize) -> String {
+        if number == old {
+            return format!("");
+        }
+
+        let matches;
+        match maybe_matches {
+            Some(m) => {
+                matches = m;
+            },
+            None => {
+                return format!("");
+            }
+        }
+
+        let mut result = format!("\n");
+
+        if old > 0 {
+            trysp!(write!(result, "{}",
+                          self.get_string(format!("cud"),
+                                          vec![TermStack::Int(old as isize)]).unwrap_or(format!(""))),
+                   "Failed to write to result");
+        }
+
+        trysp!(write!(result, "{}{}",
+                      self.get_string(format!("clr_eol"), vec![]).unwrap_or(format!("")),
+                      matches[old]),
+               "Failed to write to result");
+
+        if number > old + 1 {
+            trysp!(write!(result, "{}",
+                          self.get_string(format!("cud"), 
+                                          vec![TermStack::Int((number - old - 1) as isize)])
+                          .unwrap_or(format!(""))),
+                   "Foiled to write to result");
+        } else if old > number {
+            trysp!(write!(result, "{}",
+                          self.get_string(format!("cuu"), 
+                                          vec![TermStack::Int((old - number + 1) as isize)])
+                          .unwrap_or(format!(""))),
+                   "Failed to write to result");
+        } else {
+            // do nothing
+        }
+
+        format!("{}\n{}{}{}{}", result,
+                self.get_string(format!("clr_eol"), vec![]).unwrap_or(format!("")),
+                MATCH_SELECT, self.truncate_string(matches[number].clone()),
+                self.get_string(format!("rc"), vec![]).unwrap_or(format!("")))
+    }
+
+    fn truncate_string(&self, item: Arc<String>) -> Arc<String> {
+        if UnicodeWidthStr::width(item.as_str()) > self.cols as usize {
+            let mut owned = (*item).clone();
+            while UnicodeWidthStr::width(owned.as_str()) > self.cols as usize {
+                owned.pop();
+            }
+            Arc::new(owned)
+        } else {
+            item
+        }
+    }
     
     pub fn render_matches(&self, maybe_matches: Option<&[Arc<String>]>, number: usize) -> String {
         let matches;
@@ -199,19 +262,8 @@ impl UI {
                        MATCH_PRE).expect("Failed to write pre to result");
             }
 
-            if UnicodeWidthStr::width(item.as_str()) > self.cols as usize {
-                let mut owned = (**item).clone();
-                while UnicodeWidthStr::width(owned.as_str()) > self.cols as usize {
-                    // truncade long lines
-                    owned.pop();
-                }
-
-                // draw the item
-                write!(result, "{}", owned).expect("Writes to strings should not fail");
-            } else {
-                // draw the item
-                write!(result, "{}", item).expect("Writes to strings should not fail");
-            }
+            // draw the item
+            write!(result, "{}", self.truncate_string(item.clone())).expect("Writes to strings should not fail");
         }
 
         // restore the cursor
@@ -232,10 +284,6 @@ impl UI {
                 self.get_string(format!("cuu"), vec![TermStack::Int(number as isize)]).unwrap_or(format!("")),
                 PROMPT,
                 self.get_string(format!("sc"), vec![]).unwrap_or(format!("")))
-    }
-
-    pub fn clear_screen(&self) -> String {
-        self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!(""))
     }
 
     fn input_query<T: AsRef<str>>(&self, query: T, chr: char) -> StrResult<(String, Option<String>)> {

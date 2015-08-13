@@ -150,8 +150,8 @@ impl EventLoop {
                           "Failed to output to terminal");
                 },
                 Event::Select(number) => {
-                    trys!(self.terminal.output_str(self.ui.clear_screen()), "Failed to clear screen");
-                    trys!(self.terminal.output_str(self.ui.render_matches(matches.as_ref().map(|m| m.as_ref()), number)),
+                    trys!(self.terminal.output_str(self.ui.render_selection(
+                        matches.as_ref().map(|m| m.as_ref()), number, match_number)),
                           "Failed to draw matches");
                     match_number = number;
                 }
