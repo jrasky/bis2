@@ -21,5 +21,7 @@ pub enum Event {
     Input(char),
     Query(String),
     Match(Vec<Arc<String>>, Arc<String>),
-    Quit(bool)
+    Quit(bool),
+    MatchUp, MatchDown,
+    Select(usize)
 }

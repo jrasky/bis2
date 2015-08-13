@@ -17,8 +17,8 @@ use bis_c;
 use types::*;
 
 pub fn read_history(emit: Sender<Event>) {
-    let history_path = env::var("HISTFILE").expect("Failed to get bash history file");
-    let input_file = BufReader::new(File::open(history_path).expect("Cauld not open history file"));
+    let history_path = trysp!(env::var("HISTFILE"), "Failed to get bash history file");
+    let input_file = BufReader::new(trysp!(File::open(history_path), "Cauld not open history file"));
     let mut count = -1;
     let base = SearchBase::from_iter(input_file.lines().map(|maybe| {
         count += 1;
@@ -26,7 +26,7 @@ pub fn read_history(emit: Sender<Event>) {
         LineInfo::new(maybe.expect("Failed to read line from file"), count)
     }));
     // if this fails, we can't search anything
-    emit.send(Event::SearchReady(base)).expect("Failed to emit search ready signal");
+    trysp!(emit.send(Event::SearchReady(base)), "Failed to emit search ready signal");
 }
 
 pub fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
@@ -35,11 +35,11 @@ pub fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
         match maybe_chr {
             Err(_) => {
                 error!("Failed to read input, quitting");
-                emit.send(Event::Quit(false)).expect("Failed to emit quit signal");
+                trysp!(emit.send(Event::Quit(false)), "Failed to emit quit signal");
                 break;
             },
             Ok(chr) => {
-                emit.send(Event::Input(chr)).expect("Failed to send character");
+                trysp!(emit.send(Event::Input(chr)), "Failed to send character");
                 if stop.load(Ordering::Relaxed) {
                     debug!("Input thread exiting");
                     break;
@@ -51,20 +51,20 @@ pub fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
 
 pub fn read_signals(emit: Sender<Event>) {
     // wait for a sigint
-    bis_c::wait_sigint().expect("Failed to wait for sigint");
+    trysp!(bis_c::wait_sigint(), "Failed to wait for sigint");
 
     debug!("Caught sigint");
 
     // send a quit signal
-    emit.send(Event::Quit(false)).is_ok();
+    let _ = emit.send(Event::Quit(false));
     // might happen after events is closed, so don't fail
 }
 
 pub fn start_query(emit: Sender<Event>, base: Arc<SearchBase>, query: Arc<String>) {
     let result = base.query::<&String>(query.borrow());
-    emit.send(Event::Match(result, query)).and_then(|_| {
+    let _ = emit.send(Event::Match(result, query)).and_then(|_| {
         trace!("Finished query");
         Ok(())
-    }).is_ok();
+    });
     // don't panic on fail send, events might be already closed
 }

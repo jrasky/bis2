@@ -11,7 +11,6 @@
 // WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied. See the
 // License for the specific language concerning governing permissions and
 // limitations under the License.
-#![feature(get_type_id)]
 #![feature(collections)]
 #![feature(cstr_to_str)]
 #![feature(result_expect)]

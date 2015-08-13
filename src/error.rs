@@ -34,6 +34,13 @@ macro_rules! trys {
     })
 }
 
+macro_rules! trysp {
+    ($expr: expr, $($arg: tt)*) => (match $expr {
+        $crate::std::result::Result::Ok(v) => v,
+        $crate::std::result::Result::Err(e) => panic!(format!("{}: {}", format!($($arg)*), e))
+    })
+}
+
 pub type StrResult<T> = Result<T, StrError>;
 
 #[derive(Debug)]
@@ -76,6 +83,12 @@ impl StrError {
     }
 
     pub fn from_any(item: Box<Any>) -> StrError {
-        StrError::new(format!("{:?}", item.get_type_id()), None)
+        item.downcast_ref::<&'static str>().map(|msg| {
+            StrError::new(*msg, None)
+        }).or_else(|| {
+            item.downcast_ref::<String>().map(|msg| {
+                StrError::new(msg.clone(), None)
+            })
+        }).unwrap_or(StrError::new(format!("Box<Any>"), None))
     }
 }

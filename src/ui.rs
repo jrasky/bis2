@@ -21,6 +21,8 @@ use std::iter::FromIterator;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
+use std::cmp;
+
 use bis_c::*;
 use constants::*;
 use error::*;
@@ -37,16 +39,16 @@ pub enum TermStack {
     Bool(bool)
 }
 
-#[derive(Debug)]
 pub struct UI {
     rows: u16,
     cols: u16,
     strings: HashMap<String, String>,
-    control: HashMap<String, Option<String>>
+    control: HashMap<String, Option<String>>,
+    emit: Sender<Event>
 }
 
 impl UI {
-    pub fn create() -> StrResult<UI> {
+    pub fn create(emit: Sender<Event>) -> StrResult<UI> {
         let info = match TermInfo::from_env() {
             Ok(info) => info,
             Err(e) => return errs!(e, "Failed to get TermInfo")
@@ -61,15 +63,6 @@ impl UI {
                 Err(e) => return errs!(e, "failed to convert value to String")
             };
 
-            // we only care about cuu1 and cud1
-            if strvalue == "cuu1" {
-                for i in 1..strvalue.len() - 1 {
-                    control.entry(strvalue[0..i].to_owned()).or_insert(None);
-                }
-                
-                control.insert(strvalue.clone(), Some(name.clone()));
-            }
-
             strings.insert(name, strvalue);
         }
 
@@ -78,11 +71,17 @@ impl UI {
             Err(e) => return errs!(e, "Failed to get terminal size")
         };
 
+        // assume an ANSI terminal for input sequences
+        control.insert(format!("["), None);
+        control.insert(format!("[A"), Some(format!("cuu1")));
+        control.insert(format!("[B"), Some(format!("cud1")));
+
         Ok(UI {
             rows: rows,
             cols: cols,
             strings: strings,
-            control: control
+            control: control,
+            emit: emit
         })
     }
 
@@ -171,10 +170,26 @@ impl UI {
         Some(result)
     }
     
-    pub fn render_matches(&self, matches: Vec<Arc<String>>, number: usize) -> String {
+    pub fn render_matches(&self, maybe_matches: Option<&[Arc<String>]>, number: usize) -> String {
+        let matches;
+        match maybe_matches {
+            Some(m) => {
+                matches = m;
+            },
+            None => {
+                return format!("");
+            }
+        }
+
         let mut result = format!("");
+        let match_number = cmp::min(MATCH_NUMBER, self.rows as usize - 1);
 
         for (idx, item) in matches.into_iter().enumerate() {
+            if idx >= match_number {
+                // don't render past the end of the screen
+                break;
+            }
+
             // write the pre
             if idx == number {
                 write!(result, "{}{}",
@@ -185,7 +200,7 @@ impl UI {
             }
 
             if UnicodeWidthStr::width(item.as_str()) > self.cols as usize {
-                let mut owned = (*item).clone();
+                let mut owned = (**item).clone();
                 while UnicodeWidthStr::width(owned.as_str()) > self.cols as usize {
                     // truncade long lines
                     owned.pop();
@@ -212,19 +227,28 @@ impl UI {
     }
 
     pub fn render_prompt(&self) -> String {
-        format!("{}{}{}{}", String::from_iter(vec!['\n'; MATCH_NUMBER].into_iter()),
-                self.get_string(format!("cuu"), vec![TermStack::Int(MATCH_NUMBER as isize)]).unwrap_or(format!("")),
+        let number = cmp::min(MATCH_NUMBER, self.rows as usize - 1);
+        format!("{}{}{}{}", String::from_iter(vec!['\n'; number].into_iter()),
+                self.get_string(format!("cuu"), vec![TermStack::Int(number as isize)]).unwrap_or(format!("")),
                 PROMPT,
                 self.get_string(format!("sc"), vec![]).unwrap_or(format!("")))
     }
 
-    pub fn input_char<T: AsRef<str>>(&self, emit: Sender<Event>, query: T, chr: char) -> String {
+    pub fn clear_screen(&self) -> String {
+        self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!(""))
+    }
+
+    fn input_query<T: AsRef<str>>(&self, query: T, chr: char) -> StrResult<(String, Option<String>)> {
         if chr.is_control() {
             match chr {
+                ESC => {
+                    // escape sequence
+                    Ok((format!(""), Some(format!(""))))
+                },
                 EOT => {
                     // stop
-                    emit.send(Event::Quit(false)).expect("Failed to send quit signal");
-                    format!("")
+                    trys!(self.emit.send(Event::Quit(false)), "Failed to send quit signal");
+                    Ok((format!(""), None))
                 },
                 CTRL_U => {
                     // create our output
@@ -235,32 +259,99 @@ impl UI {
                                          self.get_string(format!("sc"), vec![]).unwrap_or(format!("")),
                                          self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!("")));
 
-                    emit.send(Event::Query(format!(""))).expect("Failed to send query signal");
-                    output
+                    trys!(self.emit.send(Event::Query(format!(""))), "Failed to send query signal");
+                    Ok((output, None))
                 },
                 '\n' => {
                     // exit
-                    emit.send(Event::Quit(true)).expect("Failed to send quit signal");
-                    format!("")
+                    trys!(self.emit.send(Event::Quit(true)), "Failed to send quit signal");
+                    Ok((format!(""), None))
                 },
                 _ => {
                     // unknown character
                     // \u{7} is BEL
-                    format!("\u{7}")
+                    Ok((format!("\u{7}"), None))
                 }
             }
         } else if UnicodeWidthStr::width(query.as_ref()) + UnicodeWidthStr::width(PROMPT) +
             UnicodeWidthChar::width(chr).unwrap_or(0) >= self.cols as usize
         {
             // don't allow users to type past the end of one line
-            format!("\u{7}")
+            Ok((format!("\u{7}"), None))
         } else {
             // output the character and clear the screen
-            emit.send(Event::Query(format!("{}{}", query.as_ref(), chr))).expect("Failed to send query signal");
+            trys!(self.emit.send(Event::Query(format!("{}{}", query.as_ref(), chr))), "Failed to send query signal");
 
-            format!("{}{}{}", chr,
-                    self.get_string(format!("sc"), vec![]).unwrap_or(format!("")),
-                    self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!("")))
+            Ok((format!("{}{}{}", chr,
+                        self.get_string(format!("sc"), vec![]).unwrap_or(format!("")),
+                        self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!(""))),
+                None))
+        }
+    }
+
+    fn input_escape<T: AsRef<str>, V: AsRef<str>>(&self, query: T, escape: V, chr: char) -> StrResult<(String, Option<String>)> {
+        let esc_query = format!("{}{}", escape.as_ref(), chr);
+        debug!("Escape query: {}", esc_query);
+        match self.control.get(&esc_query) {
+            None => {
+                // no possible escape sequence like this
+                trys!(self.emit.send(Event::Query(format!("{}{}", query.as_ref(), chr))), "Failed to send query signal");
+
+                // BEL and then print the character
+                Ok((format!("{}{}{}{}", BEL, chr,
+                            self.get_string(format!("sc"), vec![]).unwrap_or(format!("")),
+                            self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!(""))),
+                    None))
+            },
+            Some(&None) => {
+                // keep going
+                Ok((format!(""), Some(format!("{}{}", escape.as_ref(), chr))))
+            },
+            Some(&Some(ref name)) => {
+                if name == "cuu1" {
+                    trys!(self.emit.send(Event::MatchUp), "Failed to send match up signal");
+                    Ok((format!(""), None))
+                } else if name == "cud1" {
+                    trys!(self.emit.send(Event::MatchDown), "Failed to send match down signal");
+                    Ok((format!(""), None))
+                } else {
+                    Err(StrError::new(format!("Unknown escape sequence: {:?}", name), None))
+                }
+            }
+        }
+    }
+
+    pub fn input_chr<T: AsRef<str>, V: AsRef<str>>(&self, query: T, escape: Option<V>,
+                                                   chr: char) -> StrResult<(String, Option<String>)> {
+        match escape {
+            Some(esc) => self.input_escape(query, esc, chr),
+            None => self.input_query(query, chr)
+        }
+    }
+
+    pub fn match_down(&self, number: usize, total: Option<usize>) -> StrResult<String> {
+        match total {
+            Some(total) => {
+                if number + 1 >= total {
+                    Ok(format!("{}", BEL))
+                } else {
+                    trys!(self.emit.send(Event::Select(number + 1)), "Failed to send select event");
+                    Ok(format!(""))
+                }
+            },
+            None => {
+                debug!("Match down without any matches");
+                Ok(format!("{}", BEL))
+            }
+        }
+    }
+
+    pub fn match_up(&self, number: usize) -> StrResult<String> {
+        if number <= 0 {
+            Ok(format!("{}", BEL))
+        } else {
+            trys!(self.emit.send(Event::Select(number - 1)), "Failed to send select event");
+            Ok(format!(""))
         }
     }
 }

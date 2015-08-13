@@ -30,40 +30,33 @@ impl EventLoop {
         let (emit, events) = mpsc::channel();
 
         Ok(EventLoop {
-            emit: emit,
+            emit: emit.clone(),
             events: events,
             terminal: trys!(Terminal::create(), "Failed to create terminal instance"),
-            ui: trys!(UI::create(), "Failed to create UI instance")
+            ui: trys!(UI::create(emit), "Failed to create UI instance")
         })
     }
 
     fn start_threads(&self) -> (JoinHandle<()>, Arc<AtomicBool>) {
         // start the sigint thread
-        {
-            let emit = self.emit.clone();
-            thread::spawn(move || {
-                threads::read_signals(emit);
-            });
-        }
+        let emit = self.emit.clone();
+        thread::spawn(move || {
+            threads::read_signals(emit);
+        });
 
         // start reading history
-        {
-            let emit = self.emit.clone();
-            thread::spawn(move || {
-                threads::read_history(emit);
-            });
-        }
+        let emit = self.emit.clone();
+        thread::spawn(move || {
+            threads::read_history(emit);
+        });
 
         // start the input thread
-        let input_thread;
         let input_stop = Arc::new(AtomicBool::new(false));
-        {
-            let emit = self.emit.clone();
-            let stop = input_stop.clone();
-            input_thread = thread::spawn(move || {
-               threads::read_input(emit, stop)
-            });
-        }
+        let emit = self.emit.clone();
+        let stop = input_stop.clone();
+        let input_thread = thread::spawn(|| {
+            threads::read_input(emit, stop)
+        });
 
         (input_thread, input_stop)
     }
@@ -80,12 +73,15 @@ impl EventLoop {
     }
 
     fn start_query(&self, search: Option<Arc<SearchBase>>, query: Arc<String>) {
-        search.map(|base| {
-            let emit = self.emit.clone();
-            thread::spawn(move || {
-                threads::start_query(emit, base, query);
+        if !query.is_empty() {
+            // only execute queries on non-empty queries
+            search.map(|base| {
+                let emit = self.emit.clone();
+                thread::spawn(move || {
+                    threads::start_query(emit, base, query);
+                });
             });
-        });
+        }
     }
 
     pub fn run(&mut self) -> StrResult<()> {
@@ -99,66 +95,79 @@ impl EventLoop {
         trys!(self.terminal.flush(), "Failed to flush terminal");
 
         let mut query = Arc::new(format!(""));
-        let mut best_match = None;
+        let mut escape = None;
+        let mut matches = None;
         let mut search = None;
         let mut success = false;
-        let match_number = 0;
+        let mut match_number = 0;
 
-        loop {
-            match self.events.recv() {
-                Err(_) => break,
-                Ok(event) => {
-                    match event {
-                        Event::SearchReady(base) => {
-                            search = Some(Arc::new(base));
-                            // execute a query if it isn't empty
-                            if !query.is_empty() {
-                                self.start_query(search.clone(), query.clone());
-                            }
-                        },
-                        Event::Query(q) => {
-                            query = Arc::new(q);
-                            if !query.is_empty() {
-                                self.start_query(search.clone(), query.clone());
-                            } else {
-                                best_match = None;
-                            }
-                        }
-                        Event::Input(chr) => {
-                            debug!("Got input event: {:?}", chr);
-                            trys!(self.terminal.output_str(self.ui.input_char::<&String>(
-                                self.emit.clone(), query.borrow(), chr)),
-                                  "Failed to write output");
-                        },
-                        Event::Match(matches, q) => {
-                            debug!("Got match event: {:?}, {:?}", matches, q);
-                            if q == query {
-                                best_match = matches.first().cloned();
-                                // only draw matches for the current query
-                                trys!(self.terminal.output_str(self.ui.render_matches(matches, match_number)),
-                                      "Failed to draw matches");
-                            }
-                        },
-                        Event::Quit(s) => {
-                            debug!("Got quit event: {:?}", s);
-                            success = s;
-                            break;
-                        }
+        for event in self.events.iter() {
+            match event {
+                Event::SearchReady(base) => {
+                    search = Some(Arc::new(base));
+                    self.start_query(search.clone(), query.clone());
+                },
+                Event::Query(q) => {
+                    query = Arc::new(q);
+                    escape = None;
+                    matches = None;
+                    self.start_query(search.clone(), query.clone());
+                }
+                Event::Input(chr) => {
+                    debug!("Got input event: {:?}", chr);
+                    let (output, new_escape) = trys!(self.ui.input_chr::<&String, &String>(query.borrow(), escape.as_ref(), chr),
+                                                     "Failed to input character");
+                    trys!(self.terminal.output_str(output),
+                          "Failed to write output");
+
+                    escape = new_escape;
+                },
+                Event::Match(m, q) => {
+                    debug!("Got match event: {:?}, {:?}", m, q);
+                    if q == query {
+                        // only draw matches for the current query
+                        match_number = 0;
+                        trys!(self.terminal.output_str(self.ui.render_matches(Some(m.as_ref()), match_number)),
+                              "Failed to draw matches");
+                        matches = Some(m);
                     }
-
-                    debug!("Flushing output");
-                    trys!(self.terminal.flush(), "Failed to flush terminal");
+                },
+                Event::Quit(s) => {
+                    debug!("Got quit event: {:?}", s);
+                    success = s;
+                    break;
+                },
+                Event::MatchDown => {
+                    trys!(self.terminal.output_str(
+                        trys!(self.ui.match_down(match_number, matches.as_ref().map(|m| m.len())),
+                              "Failed to match down")),
+                          "Failed to output to terminal");
+                },
+                Event::MatchUp => {
+                    trys!(self.terminal.output_str(
+                        trys!(self.ui.match_up(match_number),
+                              "Failed to match down")),
+                          "Failed to output to terminal");
+                },
+                Event::Select(number) => {
+                    trys!(self.terminal.output_str(self.ui.clear_screen()), "Failed to clear screen");
+                    trys!(self.terminal.output_str(self.ui.render_matches(matches.as_ref().map(|m| m.as_ref()), number)),
+                          "Failed to draw matches");
+                    match_number = number;
                 }
             }
+
+            debug!("Flushing output");
+            trys!(self.terminal.flush(), "Failed to flush terminal");
         }
 
         // stop the input thread
         trys!(self.stop_threads(input_thread, input_stop), "Failed to stop threads");
 
         // draw the best match if it exists
-        match best_match {
+        match matches {
             Some(ref m) => {
-                trys!(self.terminal.output_str(self.ui.render_best_match::<&String>(m.borrow())),
+                trys!(self.terminal.output_str(self.ui.render_best_match::<&String>(m[match_number].borrow())),
                       "Failed to draw best match");
             },
             None => {
@@ -171,8 +180,8 @@ impl EventLoop {
 
         // insert the successful match onto the terminal input buffer
         if success {
-            try!(best_match.map_or(Ok(()), |m| {
-                self.terminal.insert_input::<&String>(m.borrow()).or_else(|e| {
+            try!(matches.map_or(Ok(()), |m| {
+                self.terminal.insert_input::<&String>(m[match_number].borrow()).or_else(|e| {
                     errs!(e, "Failed to insert input")
                 })
             }));

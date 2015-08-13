@@ -240,7 +240,7 @@ impl LineInfo {
     fn permute_positions(mut list: Vec<Vec<usize>>) -> Option<Vec<Vec<usize>>> {
         let mut result = vec![];
 
-        debug!("Position list: {:?}", list);
+        trace!("Position list: {:?}", list);
 
         match list.pop() {
             None => return None,
@@ -272,7 +272,7 @@ impl LineInfo {
     fn score_position(&self, position: Vec<usize>) -> isize {
         let avg_dist: usize;
 
-        debug!("Scoring position: {:?}", position);
+        trace!("Scoring position: {:?}", position);
 
         if position.len() < 2 {
             avg_dist = 0;
