@@ -65,19 +65,13 @@ impl FromIterator<Arc<String>> for Matches {
     }
 }
 
-impl Borrow<String> for Line {
-    fn borrow(&self) -> &String {
-        self.line.borrow()
-    }
-}
-
 impl Matches {
     pub fn len(&self) -> usize {
         self.matches.len()
     }
 
-    pub fn best(&self) -> Option<&Line> {
-        self.matches.get(0)
+    pub fn get(&self, selected: usize) -> Option<&Line> {
+        self.matches.get(selected)
     }
 
     pub fn render(&self, width: usize, selected: usize) -> String {
@@ -97,6 +91,10 @@ impl Line {
         Line {
             line: line
         }
+    }
+
+    pub fn get(&self) -> &String {
+        self.line.borrow()
     }
 
     pub fn render(&self, width: Option<usize>, selected: bool) -> String {
@@ -133,6 +131,11 @@ impl Escape {
         })
     }
 
+    fn cursor_up(&self, by: usize) -> String {
+        self.get_string("cuu", vec![TermStack::Int(by as isize)])
+            .unwrap_or(format!(""))
+    }
+
     pub fn restore_cursor(&self) -> String {
         self.get_string("rc", vec![]).unwrap_or(format!(""))
     }
@@ -146,10 +149,9 @@ impl Escape {
     }
 
     pub fn make_space(&self, rows: usize) -> String {
-        let number = cmp::min(MATCH_NUMBER as isize, rows as isize - 1);
+        let number = cmp::min(MATCH_NUMBER, rows - 1);
         format!("{}{}", String::from_iter(vec!['\n'; number as usize].into_iter()),
-                self.get_string("cuu", vec![TermStack::Int(number)])
-                .unwrap_or(format!("")))
+                self.cursor_up(number))
     }
 
     pub fn move_back(&self, by: usize) -> String {
@@ -175,13 +177,98 @@ impl Escape {
                 self.restore_cursor())
     }
 
-    pub fn best_match_output(&self, matches: &Matches) -> String {
-        matches.best().map_or(
-            format!("\n{}", self.clear_screen()),
-            |line| format!("{}{}\n{}", FINISH, {
-                let line: &String = line.borrow();
-                line
+    pub fn match_down(&self, matches: &Matches, width: usize, selected: usize) -> String {
+        // this gets us to the first match
+        let mut result = format!("");
+
+        // move down to the line before the last selection
+        trysp!(write!(result, "{}", String::from_iter(vec!['\n'; selected - 1].into_iter())),
+               "Writes to strings should not fail");
+
+        // render the last line as non-selected
+        match matches.get(selected - 1) {
+            None => {
+                // no such match, do nothing
+                debug!("No such match: {}", selected - 1);
+                return format!("");
             },
+            Some(line) => {
+                trysp!(write!(result, "{}{}", line.render(Some(width), false),
+                              self.get_string("clr_eol", vec![]).unwrap_or(format!(""))),
+                       "Writes to strings should not fail");
+            }
+        }
+
+        // render the next line as selected
+        match matches.get(selected) {
+            None => {
+                // no such match, do nothing
+                debug!("No such match: {}", selected);
+                return format!("");
+            },
+            Some(line) => {
+                trysp!(write!(result, "{}{}", line.render(Some(width), true),
+                              self.get_string("clr_eol", vec![]).unwrap_or(format!(""))),
+                       "Writes to strings should not fail");
+            }
+        }
+
+        // restore the cursor
+        trysp!(write!(result, "{}", self.restore_cursor()),
+               "Writes to strings should not fail");
+
+        // return the result
+        result
+    }
+
+    pub fn match_up(&self, matches: &Matches, width: usize, selected: usize) -> String {
+        // this gets us to the first match
+        let mut result = format!("");
+
+        // move down to the line before the last selection
+        trysp!(write!(result, "{}", String::from_iter(vec!['\n'; selected].into_iter())),
+               "Writes to strings should not fail");
+
+        // render the last line as selected
+        match matches.get(selected) {
+            None => {
+                // no such match, do nothing
+                debug!("No such match: {}", selected);
+                return format!("");
+            },
+            Some(line) => {
+                trysp!(write!(result, "{}{}", line.render(Some(width), true),
+                              self.get_string("clr_eol", vec![]).unwrap_or(format!(""))),
+                       "Writes to strings should not fail");
+            }
+        }
+
+        // render the next line as selected
+        match matches.get(selected + 1) {
+            None => {
+                // no such match, do nothing
+                debug!("No such match: {}", selected + 1);
+                return format!("");
+            },
+            Some(line) => {
+                trysp!(write!(result, "{}{}", line.render(Some(width), false),
+                              self.get_string("clr_eol", vec![]).unwrap_or(format!(""))),
+                       "Writes to strings should not fail");
+            }
+        }
+
+        // restore the cursor
+        trysp!(write!(result, "{}", self.restore_cursor()),
+               "Writes to strings should not fail");
+
+        // return the result
+        result
+    }
+
+    pub fn best_match_output(&self, matches: &Matches, selected: usize) -> String {
+        matches.get(selected).map_or(
+            format!("\n{}", self.clear_screen()),
+            |line| format!("{}{}\n{}", FINISH, line.get(),
                            self.clear_screen()))
     }
 

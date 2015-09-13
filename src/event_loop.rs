@@ -5,13 +5,11 @@ use std::sync::Arc;
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
-use std::borrow::Borrow;
 use std::iter::FromIterator;
 use std::error::Error;
 
 use std::sync::mpsc;
 use std::thread;
-use std::cmp;
 use std::raw;
 use std::mem;
 
@@ -149,10 +147,28 @@ impl EventLoop {
                     break;
                 },
                 Event::KeyDown => {
-                    self.selected = cmp::min(self.selected + 1, self.matches.len());
+                    if self.selected + 1 < self.matches.len() {
+                        self.selected += 1;
+                        let size = self.terminal.cols() as usize;
+                        trys!(self.terminal.output_str(
+                            self.escape.match_down(&self.matches, size, self.selected)),
+                              "Failed to output match down");
+                    } else {
+                        trys!(self.emit.send(Event::Bell),
+                              "Failed to send bell event");
+                    }
                 },
                 Event::KeyUp => {
-                    self.selected = cmp::max(1, self.selected) - 1;
+                    if self.selected > 0 {
+                        self.selected -= 1;
+                        let size = self.terminal.cols() as usize;
+                        trys!(self.terminal.output_str(
+                            self.escape.match_up(&self.matches, size, self.selected)),
+                              "Failed to output match down");
+                    } else {
+                        trys!(self.emit.send(Event::Bell),
+                              "Failed to send bell event");
+                    }
                 },
                 Event::Clear => {
                     if !self.query.is_empty() {
@@ -160,6 +176,7 @@ impl EventLoop {
                             self.escape.move_back(self.query.len())),
                               "Failed to output to terminal");
                         self.query = Arc::new(format!(""));
+                        self.matches = Matches::from_iter(vec![]);
                     } else {
                         trys!(self.emit.send(Event::Bell),
                               "Failed to send bell event");
@@ -180,7 +197,7 @@ impl EventLoop {
 
         // draw the best match if it exists
         trys!(self.terminal.output_str(
-            self.escape.best_match_output(&self.matches)),
+            self.escape.best_match_output(&self.matches, self.selected)),
               "Failed to draw best match");
 
         debug!("Flushing output");
@@ -188,10 +205,10 @@ impl EventLoop {
 
         // insert the successful match onto the terminal input buffer
         if self.success {
-            match self.matches.best() {
+            match self.matches.get(self.selected) {
                 None => {debug!("No best match")},
                 Some(m) => {
-                    trys!(self.terminal.insert_input::<&String>(m.borrow()),
+                    trys!(self.terminal.insert_input(m.get()),
                           "Failed to insert input");
                 }
             }
