@@ -21,7 +21,9 @@ use error::*;
 use bis_c::*;
 
 pub struct Terminal {
-    output: Stdout
+    output: Stdout,
+    rows: u16,
+    cols: u16
 }
 
 impl Drop for Terminal {
@@ -40,9 +42,21 @@ impl Terminal {
 
         trys!(mask_sigint(), "Failed to mask sigint");
 
+        let (rows, cols) = trys!(get_terminal_size(), "Failed to get terminal size");
+
         Ok(Terminal {
-            output: output
+            output: output,
+            rows: rows,
+            cols: cols
         })
+    }
+
+    pub fn rows(&self) -> u16 {
+        self.rows
+    }
+
+    pub fn cols(&self) -> u16 {
+        self.cols
     }
 
     pub fn output_str<T: AsRef<str>>(&mut self, s: T) -> StrResult<()> {

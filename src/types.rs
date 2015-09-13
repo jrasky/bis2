@@ -19,9 +19,25 @@ use search::SearchBase;
 pub enum Event {
     SearchReady(SearchBase),
     Input(char),
-    Query(String),
     Match(Vec<Arc<String>>, Arc<String>),
     Quit(bool),
-    MatchUp, MatchDown,
-    Select(usize)
+    KeyUp, KeyDown,
+    Clear, Bell
+}
+
+impl Event {
+    pub fn maybe_clone(&self) -> Option<Event> {
+        use ::types::Event::*;
+        match self {
+            &SearchReady(_) => None,
+            &Input(ref chr) => Some(Input(*chr)),
+            &Match(ref matches, ref query) =>
+                Some(Match(matches.clone(), query.clone())),
+            &Quit(ref success) => Some(Quit(*success)),
+            &KeyUp => Some(KeyUp),
+            &KeyDown => Some(KeyDown),
+            &Clear => Some(Clear),
+            &Bell => Some(Bell)
+        }
+    }
 }

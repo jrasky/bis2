@@ -11,12 +11,14 @@
 // WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied. See the
 // License for the specific language concerning governing permissions and
 // limitations under the License.
-#![feature(collections)]
 #![feature(cstr_to_str)]
 #![feature(result_expect)]
 #![feature(convert)]
 #![feature(iter_arith)]
 #![feature(io)]
+#![feature(binary_heap_extras)]
+#![feature(raw)]
+#![feature(arc_unique)]
 extern crate unicode_width;
 extern crate term;
 extern crate libc;

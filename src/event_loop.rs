@@ -6,15 +6,20 @@ use std::sync::mpsc::{Sender, Receiver};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 use std::borrow::Borrow;
+use std::iter::FromIterator;
+use std::error::Error;
 
 use std::sync::mpsc;
 use std::thread;
+use std::cmp;
+use std::raw;
+use std::mem;
 
-use ui::UI;
 use terminal::Terminal;
 use search::SearchBase;
 use threads;
 
+use ui::*;
 use error::*;
 use types::*;
 
@@ -22,138 +27,146 @@ pub struct EventLoop {
     emit: Sender<Event>,
     events: Receiver<Event>,
     terminal: Terminal,
-    ui: UI
+    escape: Escape,
+    matches: Matches,
+    selected: usize,
+    query: Arc<String>,
+    success: bool,
+    input_thread: Option<JoinHandle<()>>,
+    input_stop: Arc<AtomicBool>,
+    search: Option<Arc<SearchBase>>
 }
 
 impl EventLoop {
     pub fn create() -> StrResult<EventLoop> {
         let (emit, events) = mpsc::channel();
+        let (input_thread, input_stop) = threads::start_threads(emit.clone());
 
         Ok(EventLoop {
-            emit: emit.clone(),
+            emit: emit,
             events: events,
             terminal: trys!(Terminal::create(), "Failed to create terminal instance"),
-            ui: trys!(UI::create(emit), "Failed to create UI instance")
+            escape: trys!(Escape::create(), "Failed to create escape instance"),
+            matches: Matches::from_iter(vec![]),
+            selected: 0,
+            query: Arc::new(format!("")),
+            success: false,
+            input_thread: Some(input_thread),
+            input_stop: input_stop,
+            search: None
         })
     }
 
-    fn start_threads(&self) -> (JoinHandle<()>, Arc<AtomicBool>) {
-        // start the sigint thread
-        let emit = self.emit.clone();
-        thread::spawn(move || {
-            threads::read_signals(emit);
-        });
-
-        // start reading history
-        let emit = self.emit.clone();
-        thread::spawn(move || {
-            threads::read_history(emit);
-        });
-
-        // start the input thread
-        let input_stop = Arc::new(AtomicBool::new(false));
-        let emit = self.emit.clone();
-        let stop = input_stop.clone();
-        let input_thread = thread::spawn(|| {
-            threads::read_input(emit, stop)
-        });
-
-        (input_thread, input_stop)
-    }
-
-    fn stop_threads(&mut self, input_thread: JoinHandle<()>, input_stop: Arc<AtomicBool>) -> StrResult<()> {
+    fn stop_threads(&mut self) -> StrResult<()> {
         // prompt the input thread to stop
-        input_stop.store(true, Ordering::Relaxed);
+        self.input_stop.store(true, Ordering::Relaxed);
 
         // insert a bogus byte to wake it up
         trys!(self.terminal.insert_input(" "), "Failed to insert bogus byte");
 
+        // get our input thread handle
+        let handle = match self.input_thread.take() {
+            None => return Err(StrError::new("No input thread handle", None)),
+            Some(handle) => handle
+        };
+
         // join the thread
-        input_thread.join().or_else(|e| {errs!(StrError::from_any(e), "Failed to wait for input thread")})
+        match handle.join() {
+            Ok(_) => Ok(()),
+            Err(opaque) => Err({
+                let error = opaque.downcast_ref::<StrError>().map(|error: &StrError| {
+                    let dummy = StrError::new("dummy", None);
+                    let value: Box<Error> = Box::new(dummy);
+                    let raw_object: raw::TraitObject = unsafe {mem::transmute(value)};
+                    let synthetic: Box<Error> = unsafe {mem::transmute(raw::TraitObject {
+                        data: error as *const _ as *mut (),
+                        vtable: raw_object.vtable
+                    })};
+                    synthetic
+                });
+                StrError::new("Input thread failed", error)
+            })
+        }
     }
 
-    fn start_query(&self, search: Option<Arc<SearchBase>>, query: Arc<String>) {
-        if !query.is_empty() {
+    fn start_query(&self) {
+        if !self.query.is_empty() {
             // only execute queries on non-empty queries
-            search.map(|base| {
-                let emit = self.emit.clone();
-                thread::spawn(move || {
-                    threads::start_query(emit, base, query);
-                });
-            });
+            match self.search {
+                None => {}, // do nothing
+                Some(ref base) => {
+                    let emit = self.emit.clone();
+                    let query = self.query.clone();
+                    let base = base.clone();
+                    thread::spawn(move || {
+                        threads::start_query(emit, base, query);
+                    });
+                }
+            }
         }
     }
 
     pub fn run(&mut self) -> StrResult<()> {
-        // start the threads
-        let (input_thread, input_stop) = self.start_threads();
-
         // draw the prompt
-        trys!(self.terminal.output_str(self.ui.render_prompt()), "Failed to render prompt");
+        let size = self.terminal.rows() as usize;
+        trys!(self.terminal.output_str(self.escape.render_prompt(size)),
+              "Failed to render prompt");
 
         // flush the terminal
         trys!(self.terminal.flush(), "Failed to flush terminal");
 
-        let mut query = Arc::new(format!(""));
-        let mut escape = None;
-        let mut matches = None;
-        let mut search = None;
-        let mut success = false;
-        let mut match_number = 0;
-
         for event in self.events.iter() {
             match event {
                 Event::SearchReady(base) => {
-                    search = Some(Arc::new(base));
-                    self.start_query(search.clone(), query.clone());
+                    self.search = Some(Arc::new(base));
+                    self.start_query();
                 },
-                Event::Query(q) => {
-                    query = Arc::new(q);
-                    escape = None;
-                    matches = None;
-                    self.start_query(search.clone(), query.clone());
-                }
                 Event::Input(chr) => {
-                    debug!("Got input event: {:?}", chr);
-                    let (output, new_escape) = trys!(self.ui.input_chr::<&String, &String>(query.borrow(), escape.as_ref(), chr),
-                                                     "Failed to input character");
-                    trys!(self.terminal.output_str(output),
-                          "Failed to write output");
-
-                    escape = new_escape;
+                    Arc::make_mut(&mut self.query).push(chr);
+                    trys!(self.terminal.output_str(self.escape.query_output(chr)),
+                          "Failed to output character");
+                    self.start_query();
                 },
-                Event::Match(m, q) => {
-                    debug!("Got match event: {:?}, {:?}", m, q);
-                    if q == query {
+                Event::Match(matches, query) => {
+                    debug!("Got match event: {:?}, {:?}", matches, query);
+                    if query == self.query {
                         // only draw matches for the current query
-                        match_number = 0;
-                        trys!(self.terminal.output_str(self.ui.render_matches(Some(m.as_ref()), match_number)),
-                              "Failed to draw matches");
-                        matches = Some(m);
+                        self.selected = 0;
+                        self.matches = Matches::from_iter(matches);
+                        let size = self.terminal.cols() as usize;
+                        trys!(self.terminal.output_str(
+                            self.escape.matches_output(
+                                &self.matches,
+                                size,
+                                self.selected)),
+                              "Failed to output matches");
                     }
                 },
-                Event::Quit(s) => {
-                    debug!("Got quit event: {:?}", s);
-                    success = s;
+                Event::Quit(success) => {
+                    debug!("Got quit event: {:?}", success);
+                    self.success = success;
                     break;
                 },
-                Event::MatchDown => {
-                    trys!(self.terminal.output_str(
-                        trys!(self.ui.match_down(match_number, matches.as_ref().map(|m| m.len())),
-                              "Failed to match down")),
-                          "Failed to output to terminal");
+                Event::KeyDown => {
+                    self.selected = cmp::min(self.selected + 1, self.matches.len());
                 },
-                Event::MatchUp => {
-                    trys!(self.terminal.output_str(
-                        trys!(self.ui.match_up(match_number),
-                              "Failed to match down")),
-                          "Failed to output to terminal");
+                Event::KeyUp => {
+                    self.selected = cmp::max(1, self.selected) - 1;
                 },
-                Event::Select(number) => {
-                    trys!(self.terminal.output_str(self.ui.render_selection(
-                        matches.as_ref().map(|m| m.as_ref()), number, match_number)),
-                          "Failed to draw matches");
-                    match_number = number;
+                Event::Clear => {
+                    if !self.query.is_empty() {
+                        trys!(self.terminal.output_str(
+                            self.escape.move_back(self.query.len())),
+                              "Failed to output to terminal");
+                        self.query = Arc::new(format!(""));
+                    } else {
+                        trys!(self.emit.send(Event::Bell),
+                              "Failed to send bell event");
+                    }
+                },
+                Event::Bell => {
+                    trys!(self.terminal.output_str(self.escape.bell()),
+                          "Failed to output bell");
                 }
             }
 
@@ -162,31 +175,27 @@ impl EventLoop {
         }
 
         // stop the input thread
-        trys!(self.stop_threads(input_thread, input_stop), "Failed to stop threads");
+        trys!(self.stop_threads(), "Failed to stop threads");
 
         // draw the best match if it exists
-        match matches {
-            Some(ref m) => {
-                trys!(self.terminal.output_str(self.ui.render_best_match::<&String>(m[match_number].borrow())),
-                      "Failed to draw best match");
-            },
-            None => {
-                trys!(self.terminal.output_str("\n"), "Failed to draw newline");
-            }
-        }
+        trys!(self.terminal.output_str(
+            self.escape.best_match_output(&self.matches)),
+              "Failed to draw best match");
 
         debug!("Flushing output");
         trys!(self.terminal.flush(), "Failed to flush terminal");
 
         // insert the successful match onto the terminal input buffer
-        if success {
-            try!(matches.map_or(Ok(()), |m| {
-                self.terminal.insert_input::<&String>(m[match_number].borrow()).or_else(|e| {
-                    errs!(e, "Failed to insert input")
-                })
-            }));
+        if self.success {
+            match self.matches.best() {
+                None => {debug!("No best match")},
+                Some(m) => {
+                    trys!(self.terminal.insert_input::<&String>(m.borrow()),
+                          "Failed to insert input");
+                }
+            }
         }
-
+        
         // success
         Ok(())
     }

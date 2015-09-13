@@ -14,7 +14,6 @@
 use std::fmt::{Display, Formatter};
 use std::error::Error;
 use std::borrow::Borrow;
-use std::any::Any;
 
 use std::fmt;
 
@@ -80,15 +79,5 @@ impl StrError {
             description: description.into(),
             cause: cause
         }
-    }
-
-    pub fn from_any(item: Box<Any>) -> StrError {
-        item.downcast_ref::<&'static str>().map(|msg| {
-            StrError::new(*msg, None)
-        }).or_else(|| {
-            item.downcast_ref::<String>().map(|msg| {
-                StrError::new(msg.clone(), None)
-            })
-        }).unwrap_or(StrError::new(format!("Box<Any>"), None))
     }
 }

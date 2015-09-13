@@ -19,14 +19,11 @@ use std::borrow::Borrow;
 use std::fmt::Write;
 use std::iter::FromIterator;
 use std::sync::Arc;
-use std::sync::mpsc::Sender;
 
 use std::cmp;
 
-use bis_c::*;
 use constants::*;
 use error::*;
-use types::*;
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum TermStack {
@@ -38,7 +35,7 @@ pub enum TermStack {
     #[allow(dead_code)]
     Bool(bool)
 }
-
+/*
 pub struct UI {
     rows: u16,
     cols: u16,
@@ -46,7 +43,247 @@ pub struct UI {
     control: HashMap<String, Option<String>>,
     emit: Sender<Event>
 }
+*/
+pub struct Line {
+    line: Arc<String>
+}
 
+pub struct Escape {
+    strings: HashMap<String, String>
+}
+
+pub struct Matches {
+    matches: Vec<Line>,
+}
+
+impl FromIterator<Arc<String>> for Matches {
+    fn from_iter<T>(matches: T)
+                    -> Matches where T: IntoIterator<Item=Arc<String>> {
+        Matches {
+            matches: matches.into_iter().map(|item| Line::new(item)).collect(),
+        }
+    }
+}
+
+impl Borrow<String> for Line {
+    fn borrow(&self) -> &String {
+        self.line.borrow()
+    }
+}
+
+impl Matches {
+    pub fn len(&self) -> usize {
+        self.matches.len()
+    }
+
+    pub fn best(&self) -> Option<&Line> {
+        self.matches.get(0)
+    }
+
+    pub fn render(&self, width: usize, selected: usize) -> String {
+        let mut result = format!("");
+
+        for (i, line) in self.matches.iter().enumerate() {
+            if i != 0 {
+                trysp!(write!(result, "\n"), "Writes to strings should not fail");
+            }
+
+            trysp!(write!(result, "{}", line.render(Some(width), i == selected)),
+                   "Writes to strings should not fail");
+        }
+
+        result
+    }
+}
+
+impl Line {
+    pub fn new(line: Arc<String>) -> Line {
+        Line {
+            line: line
+        }
+    }
+
+    pub fn render(&self, width: Option<usize>, selected: bool) -> String {
+        let mut result;
+
+        if selected {
+            result = format!("{}{}{}", MATCH_PRE, MATCH_SELECT, self.line);
+        } else {
+            result = format!("{}{}", MATCH_PRE, self.line);
+        }
+
+        width.map(|size| {
+            while UnicodeWidthStr::width(result.as_str()) > size {
+                result.pop();
+            }
+        });
+
+        result
+    }
+}
+
+impl Escape {
+    pub fn create() -> StrResult<Escape> {
+        let info = trys!(TermInfo::from_env(), "Failed to get TermInfo");
+        let mut strings = HashMap::default();
+
+        for (name, value) in info.strings.into_iter() {
+            strings.insert(name, trys!(String::from_utf8(value),
+                                       "value was not utf-8"));
+        }
+
+        Ok(Escape {
+            strings: strings
+        })
+    }
+
+    pub fn restore_cursor(&self) -> String {
+        self.get_string("rc", vec![]).unwrap_or(format!(""))
+    }
+
+    pub fn save_cursor(&self) -> String {
+        self.get_string("sc", vec![]).unwrap_or(format!(""))
+    }
+
+    pub fn clear_screen(&self) -> String {
+        self.get_string("clr_eos", vec![]).unwrap_or(format!(""))
+    }
+
+    pub fn make_space(&self, rows: usize) -> String {
+        let number = cmp::min(MATCH_NUMBER as isize, rows as isize - 1);
+        format!("{}{}", String::from_iter(vec!['\n'; number as usize].into_iter()),
+                self.get_string("cuu", vec![TermStack::Int(number)])
+                .unwrap_or(format!("")))
+    }
+
+    pub fn move_back(&self, by: usize) -> String {
+        format!("{}{}{}",
+                self.get_string("cub", vec![
+                    TermStack::Int(by as isize)
+                        ]).unwrap_or(format!("")),
+                self.save_cursor(),
+                self.clear_screen())
+    }
+
+    pub fn query_output(&self, chr: char) -> String {
+        format!("{}{}{}", chr,
+                self.save_cursor(),
+                self.clear_screen())
+    }
+
+    pub fn matches_output(&self, matches: &Matches, width: usize, selected: usize)
+                          -> String {
+        format!("{}{}{}",
+                self.clear_screen(),
+                matches.render(width, selected),
+                self.restore_cursor())
+    }
+
+    pub fn best_match_output(&self, matches: &Matches) -> String {
+        matches.best().map_or(
+            format!("\n{}", self.clear_screen()),
+            |line| format!("{}{}\n{}", FINISH, line.render(None, false),
+                           self.clear_screen()))
+    }
+
+    pub fn render_prompt(&self, rows: usize) -> String {
+        format!("{}{}{}",
+                self.make_space(rows),
+                PROMPT,
+                self.save_cursor())
+    }
+
+    pub fn bell(&self) -> String {
+        format!("{}", BEL)
+    }
+
+    fn get_string<T: Borrow<str>>(&self, name: T, params: Vec<TermStack>)
+                                  -> Option<String> {
+        // only implement what we're actually using in the UI
+        let sequence = match self.strings.get(name.borrow()) {
+            None => {
+                trace!("No match for string: {:?}", name.borrow());
+                return None;
+            },
+            Some(s) => {
+                trace!("Matched string: {:?}", s);
+                s.clone()
+            }
+        };
+
+        let mut escaped = false;
+        let mut stack: Vec<TermStack> = vec![];
+        let mut result = String::default();
+        let mut escape = String::default();
+
+        // only implement the sequences we care about
+
+        for c in sequence.chars() {
+            if !escaped {
+                if c == '%' {
+                    escaped = true;
+                } else {
+                    result.push(c);
+                }
+            } else if escape.is_empty() {
+                if c == 'd' {
+                    match stack.pop() {
+                        Some(TermStack::Int(c)) => {
+                            result.push_str(format!("{}", c).as_ref());
+                        },
+                        Some(o) => {
+                            error!("Numeric print on non-numeric type: {:?}", o);
+                        },
+                        None => {
+                            error!("Stack was empty on print");
+                        }
+                    }
+                    escaped = false;
+                } else if c == 'p' {
+                    escape.push('p');
+                } else {
+                    error!("Unknown escape character: {:?}", c);
+                    escaped = false;
+                }
+            } else {
+                if escape == "p" {
+                    match c.to_digit(10) {
+                        Some(idx) => {
+                            if idx != 0 {
+                                match params.get(idx as usize - 1) {
+                                    Some(item) => {
+                                        stack.push(item.clone())
+                                    },
+                                    None => {
+                                        error!("There was no parameter {}", idx);
+                                    }
+                                }
+                            } else {
+                                error!("Tried to print 0th paramater");
+                            }
+                        },
+                        None => {
+                            error!("Paramater number was not a digit");
+                        }
+                    }
+
+                    escape.clear();
+                    escaped = false;
+                } else {
+                    error!("Unknown escape sequence: {:?}", escape);
+                    escape.clear();
+                    escaped = false;
+                }
+            }
+        }
+
+        trace!("Returning result: {:?}", result);
+
+        // return result
+        Some(result)
+    }
+}
+/*
 impl UI {
     pub fn create(emit: Sender<Event>) -> StrResult<UI> {
         let info = match TermInfo::from_env() {
@@ -298,24 +535,33 @@ impl UI {
                 },
                 EOT => {
                     // stop
-                    trys!(self.emit.send(Event::Quit(false)), "Failed to send quit signal");
+                    trys!(self.emit.send(Event::Quit(false)),
+                          "Failed to send quit signal");
                     Ok((format!(""), None))
                 },
                 CTRL_U => {
                     // create our output
-                    let output = format!("{}{}{}",
-                                         self.get_string(format!("cub"),
-                                                         vec![TermStack::Int(query.as_ref().len() as isize)])
-                                         .unwrap_or(format!("")),
-                                         self.get_string(format!("sc"), vec![]).unwrap_or(format!("")),
-                                         self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!("")));
+                    let output =
+                        format!("{}{}{}",
+                                self.get_string(
+                                    format!("cub"),
+                                    vec![TermStack::Int(query.as_ref().len() as isize)])
+                                .unwrap_or(format!("")),
+                                self.get_string(
+                                    format!("sc"), vec![]
+                                        ).unwrap_or(format!("")),
+                                self.get_string(
+                                    format!("clr_eos"), vec![]
+                                        ).unwrap_or(format!("")));
 
-                    trys!(self.emit.send(Event::Query(format!(""))), "Failed to send query signal");
+                    trys!(self.emit.send(Event::Query(format!(""))),
+                          "Failed to send query signal");
                     Ok((output, None))
                 },
                 '\n' => {
                     // exit
-                    trys!(self.emit.send(Event::Quit(true)), "Failed to send quit signal");
+                    trys!(self.emit.send(Event::Quit(true)),
+                          "Failed to send quit signal");
                     Ok((format!(""), None))
                 },
                 _ => {
@@ -324,18 +570,21 @@ impl UI {
                     Ok((format!("\u{7}"), None))
                 }
             }
-        } else if UnicodeWidthStr::width(query.as_ref()) + UnicodeWidthStr::width(PROMPT) +
+        } else if UnicodeWidthStr::width(query.as_ref())
+            + UnicodeWidthStr::width(PROMPT) +
             UnicodeWidthChar::width(chr).unwrap_or(0) >= self.cols as usize
         {
             // don't allow users to type past the end of one line
             Ok((format!("\u{7}"), None))
         } else {
             // output the character and clear the screen
-            trys!(self.emit.send(Event::Query(format!("{}{}", query.as_ref(), chr))), "Failed to send query signal");
+            trys!(self.emit.send(Event::Query(format!("{}{}", query.as_ref(), chr))),
+                  "Failed to send query signal");
 
-            Ok((format!("{}{}{}", chr,
-                        self.get_string(format!("sc"), vec![]).unwrap_or(format!("")),
-                        self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!(""))),
+            Ok((format!(
+                "{}{}{}", chr,
+                self.get_string(format!("sc"), vec![]).unwrap_or(format!("")),
+                self.get_string(format!("clr_eos"), vec![]).unwrap_or(format!(""))),
                 None))
         }
     }
@@ -406,3 +655,4 @@ impl UI {
         }
     }
 }
+*/
