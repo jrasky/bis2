@@ -15,13 +15,17 @@ use std::io;
 use std::thread;
 
 use search::{SearchBase, LineInfo};
-use error::StrError;
+use error::{StrError, StrResult};
 use bis_c;
 
 use types::*;
 use constants::*;
 
-pub fn start_threads(emit: Sender<Event>) -> (JoinHandle<()>, Arc<AtomicBool>) {
+pub fn start_threads(emit: Sender<Event>)
+                     -> StrResult<(JoinHandle<()>, Arc<AtomicBool>)> {
+    // mask sigint
+    trys!(bis_c::mask_sigint(), "Failed to mask SIGINT");
+
     // start the sigint thread
     let signal_emit = emit.clone();
     thread::spawn(move || {
@@ -41,10 +45,10 @@ pub fn start_threads(emit: Sender<Event>) -> (JoinHandle<()>, Arc<AtomicBool>) {
         read_input(emit, stop)
     });
 
-    (input_thread, input_stop)
+    Ok((input_thread, input_stop))
 }
 
-pub fn read_history(emit: Sender<Event>) {
+fn read_history(emit: Sender<Event>) {
     let history_path = trysp!(env::var("HISTFILE"), "Failed to get bash history file");
     let input_file = BufReader::new(trysp!(File::open(history_path), "Cauld not open history file"));
     let mut count = -1;
@@ -99,6 +103,10 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
                                     trysp!(emit.send(Event::Quit(true)),
                                            "Failed to send quit signal");
                                 },
+                                ESC => {
+                                    // escape sequence
+                                    escape = Some(format!(""));
+                                }
                                 _ => {
                                     // unknown control character
                                     trysp!(emit.send(Event::Bell),
@@ -108,7 +116,6 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
                         } else {
                             trysp!(emit.send(Event::Input(chr)),
                                    "Failed to send character");
-                            escape = Some(format!("{}", chr));
                         }
                     },
                     Some(mut seq) => {
@@ -151,7 +158,7 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
     }
 }
 
-pub fn read_signals(emit: Sender<Event>) {
+fn read_signals(emit: Sender<Event>) {
     // wait for a sigint
     trysp!(bis_c::wait_sigint(), "Failed to wait for sigint");
 

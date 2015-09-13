@@ -40,7 +40,8 @@ pub struct EventLoop {
 impl EventLoop {
     pub fn create() -> StrResult<EventLoop> {
         let (emit, events) = mpsc::channel();
-        let (input_thread, input_stop) = threads::start_threads(emit.clone());
+        let (input_thread, input_stop) =
+            trys!(threads::start_threads(emit.clone()), "Failed to start threads");
 
         Ok(EventLoop {
             emit: emit,

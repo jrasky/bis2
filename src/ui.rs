@@ -84,10 +84,6 @@ impl Matches {
         let mut result = format!("");
 
         for (i, line) in self.matches.iter().enumerate() {
-            if i != 0 {
-                trysp!(write!(result, "\n"), "Writes to strings should not fail");
-            }
-
             trysp!(write!(result, "{}", line.render(Some(width), i == selected)),
                    "Writes to strings should not fail");
         }
@@ -182,7 +178,10 @@ impl Escape {
     pub fn best_match_output(&self, matches: &Matches) -> String {
         matches.best().map_or(
             format!("\n{}", self.clear_screen()),
-            |line| format!("{}{}\n{}", FINISH, line.render(None, false),
+            |line| format!("{}{}\n{}", FINISH, {
+                let line: &String = line.borrow();
+                line
+            },
                            self.clear_screen()))
     }
 
