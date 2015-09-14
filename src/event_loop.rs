@@ -13,6 +13,8 @@
 // limitations under the License.
 use std::io::prelude::*;
 
+use threadpool::ThreadPool;
+
 use std::sync::Arc;
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,7 +23,6 @@ use std::iter::FromIterator;
 use std::error::Error;
 
 use std::sync::mpsc;
-use std::thread;
 use std::raw;
 use std::mem;
 
@@ -32,6 +33,7 @@ use threads;
 use ui::*;
 use error::*;
 use types::*;
+use constants::*;
 
 pub struct EventLoop {
     emit: Sender<Event>,
@@ -44,7 +46,8 @@ pub struct EventLoop {
     success: bool,
     input_thread: Option<JoinHandle<()>>,
     input_stop: Arc<AtomicBool>,
-    search: Option<Arc<SearchBase>>
+    search: Option<Arc<SearchBase>>,
+    pool: ThreadPool
 }
 
 impl EventLoop {
@@ -64,7 +67,8 @@ impl EventLoop {
             success: false,
             input_thread: Some(input_thread),
             input_stop: input_stop,
-            search: None
+            search: None,
+            pool: ThreadPool::new(NUM_THREADS)
         })
     }
 
@@ -109,7 +113,7 @@ impl EventLoop {
                     let emit = self.emit.clone();
                     let query = self.query.clone();
                     let base = base.clone();
-                    thread::spawn(move || {
+                    self.pool.execute(move || {
                         threads::start_query(emit, base, query);
                     });
                 }

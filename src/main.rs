@@ -25,6 +25,7 @@ extern crate libc;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
+extern crate threadpool;
 
 use std::mem;
 

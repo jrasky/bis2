@@ -24,6 +24,7 @@ pub const FACTOR_REDUCE: isize = 50;
 pub const MAX_LEN: usize = 80;
 
 pub const MATCH_NUMBER: usize = 10;
+pub const NUM_THREADS: usize = 4;
 
 pub const EOT: char = '\u{4}';
 pub const CTRL_U: char = '\u{15}';
