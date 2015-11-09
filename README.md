@@ -1,7 +1,7 @@
 # bis2
 Better search for bash, again
 
-Uses [https://gitub.com/jrasky/flx](flx)
+Uses [flx](https://gitub.com/jrasky/flx)
 
 Use a keybind in bash to replace the readline search:
 ```bash
