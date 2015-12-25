@@ -34,8 +34,7 @@ use bis_c;
 use types::*;
 use constants::*;
 
-pub fn start_threads(emit: Sender<Event>)
-                     -> StrResult<(JoinHandle<()>, Arc<AtomicBool>)> {
+pub fn start_threads(emit: Sender<Event>) -> StrResult<(JoinHandle<()>, Arc<AtomicBool>)> {
     // mask sigint
     trys!(bis_c::mask_sigint(), "Failed to mask SIGINT");
 
@@ -54,16 +53,15 @@ pub fn start_threads(emit: Sender<Event>)
     // start the input thread
     let input_stop = Arc::new(AtomicBool::new(false));
     let stop = input_stop.clone();
-    let input_thread = thread::spawn(|| {
-        read_input(emit, stop)
-    });
+    let input_thread = thread::spawn(|| read_input(emit, stop));
 
     Ok((input_thread, input_stop))
 }
 
 fn read_history(emit: Sender<Event>) {
     let history_path = trysp!(env::var("HISTFILE"), "Failed to get bash history file");
-    let input_file = BufReader::new(trysp!(File::open(history_path), "Cauld not open history file"));
+    let input_file = BufReader::new(trysp!(File::open(history_path),
+                                           "Cauld not open history file"));
     let mut count = -1.0;
     let base = SearchBase::from_iter(input_file.lines().map(|maybe| {
         count += 1.0;
@@ -71,7 +69,8 @@ fn read_history(emit: Sender<Event>) {
         LineInfo::new(maybe.expect("Failed to read line from file"), count)
     }));
     // if this fails, we can't search anything
-    trysp!(emit.send(Event::SearchReady(base)), "Failed to emit search ready signal");
+    trysp!(emit.send(Event::SearchReady(base)),
+           "Failed to emit search ready signal");
 }
 
 fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
@@ -91,7 +90,7 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
                 error!("Failed to read input, quitting");
                 trysp!(emit.send(Event::Quit(false)), "Failed to emit quit signal");
                 break;
-            },
+            }
             Ok(ESC) => {
                 escape = Some(String::default());
                 trace!("Begin escape sequence");
@@ -105,62 +104,57 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
                                     // stop
                                     trysp!(emit.send(Event::Quit(false)),
                                            "Failed to send quit event");
-                                },
+                                }
                                 CTRL_U => {
                                     // clear query
-                                    trysp!(emit.send(Event::Clear),
-                                           "Failed to send clear event");
-                                },
+                                    trysp!(emit.send(Event::Clear), "Failed to send clear event");
+                                }
                                 '\n' => {
                                     // exit
                                     trysp!(emit.send(Event::Quit(true)),
                                            "Failed to send quit signal");
-                                },
+                                }
                                 ESC => {
                                     // escape sequence
                                     escape = Some(format!(""));
-                                },
+                                }
                                 BSPC => {
                                     // backspace
                                     trysp!(emit.send(Event::Backspace),
                                            "Failed to send backspace signal");
-                                },
+                                }
                                 ch => {
                                     trace!("Unknown control character {:?}", ch);
-                                    trysp!(emit.send(Event::Bell),
-                                           "Failed to send bell event");
+                                    trysp!(emit.send(Event::Bell), "Failed to send bell event");
                                 }
                             }
                         } else {
-                            trysp!(emit.send(Event::Input(chr)),
-                                   "Failed to send character");
+                            trysp!(emit.send(Event::Input(chr)), "Failed to send character");
                         }
-                    },
+                    }
                     Some(mut seq) => {
                         seq.push(chr);
                         trace!("Sequence: {:?}", seq);
                         match control.get(&seq) {
                             None => {
                                 // no possible escape sequence like this
-                                trysp!(emit.send(Event::Bell),
-                                       "Failed to send bell event");
-                                trysp!(emit.send(Event::Input(chr)),
-                                       "Failed to send character");
+                                trysp!(emit.send(Event::Bell), "Failed to send bell event");
+                                trysp!(emit.send(Event::Input(chr)), "Failed to send character");
                                 escape = None;
-                            },
+                            }
                             Some(&None) => {
                                 // keep going
                                 escape = Some(seq);
-                            },
+                            }
                             Some(&Some(ref event)) => {
                                 // send the appropriate event
-                                let cloned = trysp!(
-                                    event.maybe_clone()
-                                        .ok_or(StrError::new(
-                                            "Event {:?} could not be cloned", None)),
-                                    "Failed to create event");
-                                trysp!(emit.send(cloned),
-                                       "Failed to send escape event");
+                                let cloned = trysp!(event.maybe_clone()
+                                                         .ok_or(StrError::new("Event {:?} \
+                                                                               could not be \
+                                                                               cloned",
+                                                                              None)),
+                                                    "Failed to create event");
+                                trysp!(emit.send(cloned), "Failed to send escape event");
                                 escape = None;
                             }
                         }

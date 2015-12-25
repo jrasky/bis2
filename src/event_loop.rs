@@ -47,14 +47,14 @@ pub struct EventLoop {
     input_thread: Option<JoinHandle<()>>,
     input_stop: Arc<AtomicBool>,
     search: Option<Arc<SearchBase>>,
-    pool: ThreadPool
+    pool: ThreadPool,
 }
 
 impl EventLoop {
     pub fn create() -> StrResult<EventLoop> {
         let (emit, events) = mpsc::channel();
-        let (input_thread, input_stop) =
-            trys!(threads::start_threads(emit.clone()), "Failed to start threads");
+        let (input_thread, input_stop) = trys!(threads::start_threads(emit.clone()),
+                                               "Failed to start threads");
 
         Ok(EventLoop {
             emit: emit,
@@ -68,7 +68,7 @@ impl EventLoop {
             input_thread: Some(input_thread),
             input_stop: input_stop,
             search: None,
-            pool: ThreadPool::new(NUM_THREADS)
+            pool: ThreadPool::new(NUM_THREADS),
         })
     }
 
@@ -77,30 +77,35 @@ impl EventLoop {
         self.input_stop.store(true, Ordering::Relaxed);
 
         // insert a bogus byte to wake it up
-        trys!(self.terminal.insert_input(" "), "Failed to insert bogus byte");
+        trys!(self.terminal.insert_input(" "),
+              "Failed to insert bogus byte");
 
         // get our input thread handle
         let handle = match self.input_thread.take() {
             None => return Err(StrError::new("No input thread handle", None)),
-            Some(handle) => handle
+            Some(handle) => handle,
         };
 
         // join the thread
         match handle.join() {
             Ok(_) => Ok(()),
-            Err(opaque) => Err({
-                let error = opaque.downcast_ref::<StrError>().map(|error: &StrError| {
-                    let dummy = StrError::new("dummy", None);
-                    let value: Box<Error> = Box::new(dummy);
-                    let raw_object: raw::TraitObject = unsafe {mem::transmute(value)};
-                    let synthetic: Box<Error> = unsafe {mem::transmute(raw::TraitObject {
-                        data: error as *const _ as *mut (),
-                        vtable: raw_object.vtable
-                    })};
-                    synthetic
-                });
-                StrError::new("Input thread failed", error)
-            })
+            Err(opaque) => {
+                Err({
+                    let error = opaque.downcast_ref::<StrError>().map(|error: &StrError| {
+                        let dummy = StrError::new("dummy", None);
+                        let value: Box<Error> = Box::new(dummy);
+                        let raw_object: raw::TraitObject = unsafe { mem::transmute(value) };
+                        let synthetic: Box<Error> = unsafe {
+                            mem::transmute(raw::TraitObject {
+                                data: error as *const _ as *mut (),
+                                vtable: raw_object.vtable,
+                            })
+                        };
+                        synthetic
+                    });
+                    StrError::new("Input thread failed", error)
+                })
+            }
         }
     }
 
@@ -108,7 +113,7 @@ impl EventLoop {
         if !self.query.is_empty() {
             // only execute queries on non-empty queries
             match self.search {
-                None => {}, // do nothing
+                None => {} // do nothing
                 Some(ref base) => {
                     let emit = self.emit.clone();
                     let query = self.query.clone();
@@ -135,13 +140,13 @@ impl EventLoop {
                 Event::SearchReady(base) => {
                     self.search = Some(Arc::new(base));
                     self.start_query();
-                },
+                }
                 Event::Input(chr) => {
                     Arc::make_mut(&mut self.query).push(chr);
                     trys!(self.terminal.output_str(self.escape.query_output(chr)),
                           "Failed to output character");
                     self.start_query();
-                },
+                }
                 Event::Match(matches, query) => {
                     debug!("Got match event: {:?}, {:?}", matches, query);
                     if query == self.query {
@@ -149,60 +154,55 @@ impl EventLoop {
                         self.selected = 0;
                         self.matches = Matches::from_iter(matches);
                         let size = self.terminal.cols() as usize;
-                        trys!(self.terminal.output_str(
-                            self.escape.matches_output(
-                                &self.matches,
-                                size,
-                                self.selected)),
+                        trys!(self.terminal.output_str(self.escape.matches_output(&self.matches,
+                                                                                  size,
+                                                                                  self.selected)),
                               "Failed to output matches");
                     }
-                },
+                }
                 Event::Quit(success) => {
                     debug!("Got quit event: {:?}", success);
                     self.success = success;
                     break;
-                },
+                }
                 Event::KeyDown => {
                     if self.selected + 1 < self.matches.len() {
                         self.selected += 1;
                         let size = self.terminal.cols() as usize;
-                        trys!(self.terminal.output_str(
-                            self.escape.match_down(&self.matches, size, self.selected)),
+                        trys!(self.terminal.output_str(self.escape.match_down(&self.matches,
+                                                                              size,
+                                                                              self.selected)),
                               "Failed to output match down");
                     } else {
-                        trys!(self.emit.send(Event::Bell),
-                              "Failed to send bell event");
+                        trys!(self.emit.send(Event::Bell), "Failed to send bell event");
                     }
-                },
+                }
                 Event::KeyUp => {
                     if self.selected > 0 {
                         self.selected -= 1;
                         let size = self.terminal.cols() as usize;
-                        trys!(self.terminal.output_str(
-                            self.escape.match_up(&self.matches, size, self.selected)),
+                        trys!(self.terminal.output_str(self.escape.match_up(&self.matches,
+                                                                            size,
+                                                                            self.selected)),
                               "Failed to output match down");
                     } else {
-                        trys!(self.emit.send(Event::Bell),
-                              "Failed to send bell event");
+                        trys!(self.emit.send(Event::Bell), "Failed to send bell event");
                     }
-                },
+                }
                 Event::Clear => {
                     if !self.query.is_empty() {
-                        trys!(self.terminal.output_str(
-                            self.escape.move_back(self.query.len())),
+                        trys!(self.terminal.output_str(self.escape.move_back(self.query.len())),
                               "Failed to output to terminal");
                         self.query = Arc::new(format!(""));
                         self.matches = Matches::from_iter(vec![]);
                     } else {
-                        trys!(self.emit.send(Event::Bell),
-                              "Failed to send bell event");
+                        trys!(self.emit.send(Event::Bell), "Failed to send bell event");
                     }
-                },
+                }
                 Event::Backspace => {
                     if !self.query.is_empty() {
                         Arc::make_mut(&mut self.query).pop();
-                        trys!(self.terminal.output_str(
-                            self.escape.move_back(1)),
+                        trys!(self.terminal.output_str(self.escape.move_back(1)),
                               "Failed to output to terminal");
                         if !self.query.is_empty() {
                             self.start_query();
@@ -210,10 +210,9 @@ impl EventLoop {
                             self.matches = Matches::from_iter(vec![]);
                         }
                     } else {
-                        trys!(self.emit.send(Event::Bell),
-                              "Failed to send bell event");
+                        trys!(self.emit.send(Event::Bell), "Failed to send bell event");
                     }
-                },
+                }
                 Event::Bell => {
                     trys!(self.terminal.output_str(self.escape.bell()),
                           "Failed to output bell");
@@ -228,8 +227,8 @@ impl EventLoop {
         trys!(self.stop_threads(), "Failed to stop threads");
 
         // draw the best match if it exists
-        trys!(self.terminal.output_str(
-            self.escape.best_match_output(&self.matches, self.selected)),
+        trys!(self.terminal
+                  .output_str(self.escape.best_match_output(&self.matches, self.selected)),
               "Failed to draw best match");
 
         debug!("Flushing output");
@@ -238,14 +237,14 @@ impl EventLoop {
         // insert the successful match onto the terminal input buffer
         if self.success {
             match self.matches.get(self.selected) {
-                None => {debug!("No best match")},
+                None => debug!("No best match"),
                 Some(m) => {
                     trys!(self.terminal.insert_input(m.get()),
                           "Failed to insert input");
                 }
             }
         }
-        
+
         // success
         Ok(())
     }

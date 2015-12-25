@@ -45,7 +45,7 @@ pub type StrResult<T> = Result<T, StrError>;
 #[derive(Debug)]
 pub struct StrError {
     description: String,
-    cause: Option<Box<Error>>
+    cause: Option<Box<Error>>,
 }
 
 impl Display for StrError {
@@ -53,9 +53,7 @@ impl Display for StrError {
         try!(write!(f, "{}", self.description()));
         match self.cause() {
             None => Ok(()),
-            Some(error) => {
-                write!(f, ": {}", error)
-            }
+            Some(error) => write!(f, ": {}", error),
         }
     }
 }
@@ -68,7 +66,7 @@ impl Error for StrError {
     fn cause(&self) -> Option<&Error> {
         match self.cause {
             None => None,
-            Some(ref error) => Some(error.borrow())
+            Some(ref error) => Some(error.borrow()),
         }
     }
 }
@@ -77,7 +75,7 @@ impl StrError {
     pub fn new<T: Into<String>>(description: T, cause: Option<Box<Error>>) -> StrError {
         StrError {
             description: description.into(),
-            cause: cause
+            cause: cause,
         }
     }
 }
