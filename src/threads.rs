@@ -119,9 +119,14 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
                                 ESC => {
                                     // escape sequence
                                     escape = Some(format!(""));
-                                }
-                                _ => {
-                                    // unknown control character
+                                },
+                                BSPC => {
+                                    // backspace
+                                    trysp!(emit.send(Event::Backspace),
+                                           "Failed to send backspace signal");
+                                },
+                                ch => {
+                                    trace!("Unknown control character {:?}", ch);
                                     trysp!(emit.send(Event::Bell),
                                            "Failed to send bell event");
                                 }
@@ -133,6 +138,7 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
                     },
                     Some(mut seq) => {
                         seq.push(chr);
+                        trace!("Sequence: {:?}", seq);
                         match control.get(&seq) {
                             None => {
                                 // no possible escape sequence like this

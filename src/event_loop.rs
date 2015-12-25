@@ -198,6 +198,22 @@ impl EventLoop {
                               "Failed to send bell event");
                     }
                 },
+                Event::Backspace => {
+                    if !self.query.is_empty() {
+                        Arc::make_mut(&mut self.query).pop();
+                        trys!(self.terminal.output_str(
+                            self.escape.move_back(1)),
+                              "Failed to output to terminal");
+                        if !self.query.is_empty() {
+                            self.start_query();
+                        } else {
+                            self.matches = Matches::from_iter(vec![]);
+                        }
+                    } else {
+                        trys!(self.emit.send(Event::Bell),
+                              "Failed to send bell event");
+                    }
+                },
                 Event::Bell => {
                     trys!(self.terminal.output_str(self.escape.bell()),
                           "Failed to output bell");

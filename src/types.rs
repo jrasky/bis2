@@ -22,7 +22,7 @@ pub enum Event {
     Match(Vec<Arc<String>>, Arc<String>),
     Quit(bool),
     KeyUp, KeyDown,
-    Clear, Bell
+    Clear, Backspace, Bell
 }
 
 impl Event {
@@ -37,6 +37,7 @@ impl Event {
             &KeyUp => Some(KeyUp),
             &KeyDown => Some(KeyDown),
             &Clear => Some(Clear),
+            &Backspace => Some(Backspace),
             &Bell => Some(Bell)
         }
     }
