@@ -18,10 +18,11 @@ use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::fs::File;
-use std::iter::FromIterator;
 use std::borrow::Borrow;
 use std::thread::JoinHandle;
 use std::collections::HashMap;
+use std::rc::Rc;
+use std::iter::FromIterator;
 
 use std::env;
 use std::io;
@@ -62,12 +63,22 @@ fn read_history(emit: Sender<Event>) {
     let history_path = trysp!(env::var("HISTFILE"), "Failed to get bash history file");
     let input_file = BufReader::new(trysp!(File::open(history_path),
                                            "Cauld not open history file"));
-    let mut count = -1.0;
-    let base = SearchBase::from_iter(input_file.lines().map(|maybe| {
-        count += 1.0;
-        trace!("New line with count {}", count);
-        LineInfo::new(maybe.expect("Failed to read line from file"), count)
-    }));
+    let mut count = 0.0;
+    let mut set: HashMap<Rc<String>, LineInfo> = HashMap::new();
+
+    for maybe_line in input_file.lines() {
+        if let Ok(line) = maybe_line {
+            let line = Rc::new(line);
+            let item = set.entry(line.clone()).or_insert(LineInfo::new(line.as_str(), 0.0));
+            let old_count = item.get_factor();
+            item.set_factor(old_count + count);
+            count += 1.0;
+        }
+    }
+
+    // create the search base
+    let base = SearchBase::from_iter(set.into_iter().map(|(_, info)| info));
+
     // if this fails, we can't search anything
     trysp!(emit.send(Event::SearchReady(base)),
            "Failed to emit search ready signal");

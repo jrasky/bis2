@@ -11,7 +11,6 @@
 // WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied. See the
 // License for the specific language concerning governing permissions and
 // limitations under the License.
-#![feature(convert)]
 #![feature(io)]
 #![feature(raw)]
 extern crate unicode_width;
