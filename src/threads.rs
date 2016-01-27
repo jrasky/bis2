@@ -61,15 +61,20 @@ pub fn start_threads(emit: Sender<Event>) -> StrResult<(JoinHandle<()>, Arc<Atom
 
 fn read_history(emit: Sender<Event>) {
     let history_path = match env::var("HISTFILE") {
-        Ok(path) => path,
+        Ok(path) => path.into(),
         Err(env::VarError::NotPresent) => {
             debug!("History file not found, defaulting to ~/.bash_history");
-            "~/.bash_history".into()
+            let mut home = env::home_dir().unwrap_or("".into());
+            home.push(".bash_history");
+            home
         },
         Err(e) => {
             panic!("Failed to get history file path: {}", e);
         }
     };
+
+    trace!("History path: {:?}", history_path);
+
     let input_file = BufReader::new(trysp!(File::open(history_path),
                                            "Cauld not open history file"));
     let mut count = 0.0;
