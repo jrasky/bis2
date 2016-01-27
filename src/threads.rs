@@ -62,7 +62,16 @@ pub fn start_threads(emit: Sender<Event>)
 }
 
 fn read_history(emit: Sender<Event>) {
-    let history_path = trysp!(env::var("HISTFILE"), "Failed to get bash history file");
+    let history_path = match env::var("HISTFILE") {
+        Ok(path) => path,
+        Err(env::VarError::NotPresent) => {
+            debug!("History file not found, defaulting to ~/.bash_history");
+            "~/.bash_history".into()
+        },
+        Err(e) => {
+            panic!("Failed to get history file path: {}", e);
+        }
+    };
     let input_file = BufReader::new(trysp!(File::open(history_path), "Cauld not open history file"));
     let mut count = -1.0;
     let base = SearchBase::from_iter(input_file.lines().map(|maybe| {
