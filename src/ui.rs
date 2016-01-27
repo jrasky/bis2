@@ -33,15 +33,15 @@ pub enum TermStack {
     Int(isize),
     // here for correctness
     #[allow(dead_code)]
-    Bool(bool)
+    Bool(bool),
 }
 
 pub struct Line {
-    line: Arc<String>
+    line: Arc<String>,
 }
 
 pub struct Escape {
-    strings: HashMap<String, String>
+    strings: HashMap<String, String>,
 }
 
 pub struct Matches {
@@ -49,11 +49,10 @@ pub struct Matches {
 }
 
 impl FromIterator<Arc<String>> for Matches {
-    fn from_iter<T>(matches: T)
-                    -> Matches where T: IntoIterator<Item=Arc<String>> {
-        Matches {
-            matches: matches.into_iter().map(|item| Line::new(item)).collect(),
-        }
+    fn from_iter<T>(matches: T) -> Matches
+        where T: IntoIterator<Item = Arc<String>>
+    {
+        Matches { matches: matches.into_iter().map(|item| Line::new(item)).collect() }
     }
 }
 
@@ -80,9 +79,7 @@ impl Matches {
 
 impl Line {
     pub fn new(line: Arc<String>) -> Line {
-        Line {
-            line: line
-        }
+        Line { line: line }
     }
 
     pub fn get(&self) -> &String {
@@ -114,13 +111,10 @@ impl Escape {
         let mut strings = HashMap::default();
 
         for (name, value) in info.strings.into_iter() {
-            strings.insert(name, trys!(String::from_utf8(value),
-                                       "value was not utf-8"));
+            strings.insert(name, trys!(String::from_utf8(value), "value was not utf-8"));
         }
 
-        Ok(Escape {
-            strings: strings
-        })
+        Ok(Escape { strings: strings })
     }
 
     fn cursor_up(&self, by: usize) -> String {
@@ -142,27 +136,24 @@ impl Escape {
 
     pub fn make_space(&self, rows: usize) -> String {
         let number = cmp::min(MATCH_NUMBER, rows - 1);
-        format!("{}{}", String::from_iter(vec!['\n'; number as usize].into_iter()),
+        format!("{}{}",
+                String::from_iter(vec!['\n'; number as usize].into_iter()),
                 self.cursor_up(number))
     }
 
     pub fn move_back(&self, by: usize) -> String {
         format!("{}{}{}",
-                self.get_string("cub", vec![
-                    TermStack::Int(by as isize)
-                        ]).unwrap_or(format!("")),
+                self.get_string("cub", vec![TermStack::Int(by as isize)])
+                    .unwrap_or(format!("")),
                 self.save_cursor(),
                 self.clear_screen())
     }
 
     pub fn query_output(&self, chr: char) -> String {
-        format!("{}{}{}", chr,
-                self.save_cursor(),
-                self.clear_screen())
+        format!("{}{}{}", chr, self.save_cursor(), self.clear_screen())
     }
 
-    pub fn matches_output(&self, matches: &Matches, width: usize, selected: usize)
-                          -> String {
+    pub fn matches_output(&self, matches: &Matches, width: usize, selected: usize) -> String {
         format!("{}{}{}",
                 self.clear_screen(),
                 matches.render(width, selected),
@@ -174,7 +165,9 @@ impl Escape {
         let mut result = format!("");
 
         // move down to the line before the last selection
-        trysp!(write!(result, "{}", String::from_iter(vec!['\n'; selected - 1].into_iter())),
+        trysp!(write!(result,
+                      "{}",
+                      String::from_iter(vec!['\n'; selected - 1].into_iter())),
                "Writes to strings should not fail");
 
         // render the last line as non-selected
@@ -183,9 +176,11 @@ impl Escape {
                 // no such match, do nothing
                 debug!("No such match: {}", selected - 1);
                 return format!("");
-            },
+            }
             Some(line) => {
-                trysp!(write!(result, "{}{}", line.render(Some(width), false),
+                trysp!(write!(result,
+                              "{}{}",
+                              line.render(Some(width), false),
                               self.get_string("clr_eol", vec![]).unwrap_or(format!(""))),
                        "Writes to strings should not fail");
             }
@@ -197,9 +192,11 @@ impl Escape {
                 // no such match, do nothing
                 debug!("No such match: {}", selected);
                 return format!("");
-            },
+            }
             Some(line) => {
-                trysp!(write!(result, "{}{}", line.render(Some(width), true),
+                trysp!(write!(result,
+                              "{}{}",
+                              line.render(Some(width), true),
                               self.get_string("clr_eol", vec![]).unwrap_or(format!(""))),
                        "Writes to strings should not fail");
             }
@@ -218,7 +215,9 @@ impl Escape {
         let mut result = format!("");
 
         // move down to the line before the last selection
-        trysp!(write!(result, "{}", String::from_iter(vec!['\n'; selected].into_iter())),
+        trysp!(write!(result,
+                      "{}",
+                      String::from_iter(vec!['\n'; selected].into_iter())),
                "Writes to strings should not fail");
 
         // render the last line as selected
@@ -227,9 +226,11 @@ impl Escape {
                 // no such match, do nothing
                 debug!("No such match: {}", selected);
                 return format!("");
-            },
+            }
             Some(line) => {
-                trysp!(write!(result, "{}{}", line.render(Some(width), true),
+                trysp!(write!(result,
+                              "{}{}",
+                              line.render(Some(width), true),
                               self.get_string("clr_eol", vec![]).unwrap_or(format!(""))),
                        "Writes to strings should not fail");
             }
@@ -241,9 +242,11 @@ impl Escape {
                 // no such match, do nothing
                 debug!("No such match: {}", selected + 1);
                 return format!("");
-            },
+            }
             Some(line) => {
-                trysp!(write!(result, "{}{}", line.render(Some(width), false),
+                trysp!(write!(result,
+                              "{}{}",
+                              line.render(Some(width), false),
                               self.get_string("clr_eol", vec![]).unwrap_or(format!(""))),
                        "Writes to strings should not fail");
             }
@@ -258,31 +261,26 @@ impl Escape {
     }
 
     pub fn best_match_output(&self, matches: &Matches, selected: usize) -> String {
-        matches.get(selected).map_or(
-            format!("\n{}", self.clear_screen()),
-            |line| format!("{}{}\n{}", FINISH, line.get(),
-                           self.clear_screen()))
+        matches.get(selected).map_or(format!("\n{}", self.clear_screen()), |line| {
+            format!("{}{}\n{}", FINISH, line.get(), self.clear_screen())
+        })
     }
 
     pub fn render_prompt(&self, rows: usize) -> String {
-        format!("{}{}{}",
-                self.make_space(rows),
-                PROMPT,
-                self.save_cursor())
+        format!("{}{}{}", self.make_space(rows), PROMPT, self.save_cursor())
     }
 
     pub fn bell(&self) -> String {
         format!("{}", BEL)
     }
 
-    fn get_string<T: Borrow<str>>(&self, name: T, params: Vec<TermStack>)
-                                  -> Option<String> {
+    fn get_string<T: Borrow<str>>(&self, name: T, params: Vec<TermStack>) -> Option<String> {
         // only implement what we're actually using in the UI
         let sequence = match self.strings.get(name.borrow()) {
             None => {
                 trace!("No match for string: {:?}", name.borrow());
                 return None;
-            },
+            }
             Some(s) => {
                 trace!("Matched string: {:?}", s);
                 s.clone()
@@ -308,10 +306,10 @@ impl Escape {
                     match stack.pop() {
                         Some(TermStack::Int(c)) => {
                             result.push_str(format!("{}", c).as_ref());
-                        },
+                        }
                         Some(o) => {
                             error!("Numeric print on non-numeric type: {:?}", o);
-                        },
+                        }
                         None => {
                             error!("Stack was empty on print");
                         }
@@ -329,9 +327,7 @@ impl Escape {
                         Some(idx) => {
                             if idx != 0 {
                                 match params.get(idx as usize - 1) {
-                                    Some(item) => {
-                                        stack.push(item.clone())
-                                    },
+                                    Some(item) => stack.push(item.clone()),
                                     None => {
                                         error!("There was no parameter {}", idx);
                                     }
@@ -339,7 +335,7 @@ impl Escape {
                             } else {
                                 error!("Tried to print 0th paramater");
                             }
-                        },
+                        }
                         None => {
                             error!("Paramater number was not a digit");
                         }

@@ -23,7 +23,7 @@ use bis_c::*;
 pub struct Terminal {
     output: Stdout,
     rows: u16,
-    cols: u16
+    cols: u16,
 }
 
 impl Drop for Terminal {
@@ -47,7 +47,7 @@ impl Terminal {
         Ok(Terminal {
             output: output,
             rows: rows,
-            cols: cols
+            cols: cols,
         })
     }
 
@@ -60,7 +60,8 @@ impl Terminal {
     }
 
     pub fn output_str<T: AsRef<str>>(&mut self, s: T) -> StrResult<()> {
-        Ok(trys!(write!(self.output, "{}", s.as_ref()), "Failed to write str to output"))
+        Ok(trys!(write!(self.output, "{}", s.as_ref()),
+                 "Failed to write str to output"))
     }
 
     pub fn flush(&mut self) -> StrResult<()> {

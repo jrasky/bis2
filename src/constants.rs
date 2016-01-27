@@ -18,6 +18,7 @@ pub const EOT: char = '\u{4}';
 pub const CTRL_U: char = '\u{15}';
 pub const ESC: char = '\u{1b}';
 pub const BEL: char = '\u{7}';
+pub const BSPC: char = '\u{7f}';
 
 pub const PROMPT: &'static str = "Match: ";
 pub const FINISH: &'static str = " -> ";

@@ -21,8 +21,11 @@ pub enum Event {
     Input(char),
     Match(Vec<Arc<String>>, Arc<String>),
     Quit(bool),
-    KeyUp, KeyDown,
-    Clear, Bell
+    KeyUp,
+    KeyDown,
+    Clear,
+    Backspace,
+    Bell,
 }
 
 impl Event {
@@ -31,13 +34,13 @@ impl Event {
         match self {
             &SearchReady(_) => None,
             &Input(ref chr) => Some(Input(*chr)),
-            &Match(ref matches, ref query) =>
-                Some(Match(matches.clone(), query.clone())),
+            &Match(ref matches, ref query) => Some(Match(matches.clone(), query.clone())),
             &Quit(ref success) => Some(Quit(*success)),
             &KeyUp => Some(KeyUp),
             &KeyDown => Some(KeyDown),
             &Clear => Some(Clear),
-            &Bell => Some(Bell)
+            &Backspace => Some(Backspace),
+            &Bell => Some(Bell),
         }
     }
 }

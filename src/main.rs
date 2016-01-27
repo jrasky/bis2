@@ -11,7 +11,6 @@
 // WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied. See the
 // License for the specific language concerning governing permissions and
 // limitations under the License.
-#![feature(convert)]
 #![feature(io)]
 #![feature(raw)]
 extern crate unicode_width;
@@ -42,7 +41,7 @@ fn main() {
     match env_logger::init() {
         Ok(_) => {
             trace!("Successfully initialized logging");
-        },
+        }
         Err(e) => {
             panic!("Failed to initialize logging: {}", e);
         }
@@ -51,14 +50,14 @@ fn main() {
     // create the event loop
     let mut ev_loop = match EventLoop::create() {
         Ok(ev) => ev,
-        Err(e) => panic!("Failed to create event loop: {}", e)
+        Err(e) => panic!("Failed to create event loop: {}", e),
     };
 
     // run the event loop
     match ev_loop.run() {
         Ok(_) => {
             debug!("Event loop exited successfully");
-        },
+        }
         Err(e) => {
             panic!("Event loop failed: {}", e);
         }

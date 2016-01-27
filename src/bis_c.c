@@ -127,7 +127,7 @@ int bis_wait_sigint() {
   int result;
 
   for (;;) {
-    if ((result = sigwaitinfo(&set, NULL)) == -1) {
+    if (sigwait(&set, &result) != 0) {
       if (errno != EINTR) {
         bis_error_info.error_str = "sigwaitinfo failed";
         bis_error_info.is_errno = 1;
