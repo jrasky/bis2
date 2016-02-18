@@ -124,34 +124,27 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
                 match escape {
                     None => {
                         if chr.is_control() {
-                            match chr {
-                                EOT => {
-                                    // stop
-                                    trysp!(emit.send(Event::Quit(false)),
-                                           "Failed to send quit event");
-                                }
-                                CTRL_U => {
-                                    // clear query
-                                    trysp!(emit.send(Event::Clear), "Failed to send clear event");
-                                }
-                                '\n' => {
-                                    // exit
-                                    trysp!(emit.send(Event::Quit(true)),
-                                           "Failed to send quit signal");
-                                }
-                                ESC => {
-                                    // escape sequence
-                                    escape = Some(format!(""));
-                                }
-                                BSPC => {
-                                    // backspace
-                                    trysp!(emit.send(Event::Backspace),
-                                           "Failed to send backspace signal");
-                                }
-                                ch => {
-                                    trace!("Unknown control character {:?}", ch);
-                                    trysp!(emit.send(Event::Bell), "Failed to send bell event");
-                                }
+                            if chr == EOT {
+                                // stop
+                                trysp!(emit.send(Event::Quit(false)),
+                                       "Failed to send quit event");
+                            } else if chr == CTRL_U {
+                                // clear query
+                                trysp!(emit.send(Event::Clear), "Failed to send clear event");
+                            } else if chr == '\n' {
+                                // exit
+                                trysp!(emit.send(Event::Quit(true)),
+                                       "Failed to send quit signal");
+                            } else if chr == ESC {
+                                // escape sequence
+                                escape = Some(format!(""));
+                            } else if chr == BSPC || chr == BSPC2 {
+                                // backspace
+                                trysp!(emit.send(Event::Backspace),
+                                       "Failed to send backspace signal");
+                            } else {
+                                trace!("Unknown control character {:?}", chr);
+                                trysp!(emit.send(Event::Bell), "Failed to send bell event");
                             }
                         } else {
                             trysp!(emit.send(Event::Input(chr)), "Failed to send character");
