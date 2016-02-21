@@ -138,7 +138,7 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
                             } else if chr == ESC {
                                 // escape sequence
                                 escape = Some(format!(""));
-                            } else if chr == BSPC || chr == BSPC2 {
+                            } else if chr == BSPC || chr == DEL {
                                 // backspace
                                 trysp!(emit.send(Event::Backspace),
                                        "Failed to send backspace signal");
