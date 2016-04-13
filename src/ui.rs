@@ -260,9 +260,13 @@ impl Escape {
         result
     }
 
-    pub fn best_match_output(&self, matches: &Matches, selected: usize) -> String {
+    pub fn best_match_output(&self, matches: &Matches, selected: usize, recent: bool) -> String {
         matches.get(selected).map_or(format!("\n{}", self.clear_screen()), |line| {
-            format!("{}{}\n{}", FINISH, line.get(), self.clear_screen())
+            if recent {
+                format!("recent{}{}\n{}", FINISH, line.get(), self.clear_screen())
+            } else {
+                format!("{}{}\n{}", FINISH, line.get(), self.clear_screen())
+            }
         })
     }
 

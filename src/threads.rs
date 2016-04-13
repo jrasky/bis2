@@ -31,6 +31,7 @@ use std::thread;
 use flx::{SearchBase, LineInfo};
 use error::{StrError, StrResult};
 use bis_c;
+use ringvec::RingVec;
 
 use types::*;
 use constants::*;
@@ -79,16 +80,35 @@ fn read_history(emit: Sender<Event>) {
                                            "Cauld not open history file"));
     let mut count = 0.0;
     let mut set: HashMap<Rc<String>, LineInfo> = HashMap::new();
+    let mut short: RingVec<Rc<String>> = RingVec::new(10);
 
     for maybe_line in input_file.lines() {
         if let Ok(line) = maybe_line {
             let line = Rc::new(line);
             let item = set.entry(line.clone()).or_insert(LineInfo::new(line.as_str(), 0.0));
             let old_count = item.get_factor();
+            if old_count == 0.0 {
+                // add to short list
+                short.push(line.clone());
+            }
             item.set_factor(old_count + count);
             count += 1.0;
         }
     }
+
+    // extract shortlist
+    let mut recent = vec![];
+
+    loop {
+        match short.pop() {
+            None => break,
+            Some(item) => recent.push(Arc::new(item.as_ref().clone()))
+        }
+    }
+
+    // send off recent history
+    trysp!(emit.send(Event::HistoryReady(recent)),
+           "Failed to emit history ready signal");
 
     // create the search base
     let base = SearchBase::from_iter(set.into_iter().map(|(_, info)| info));
@@ -131,6 +151,12 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
                             } else if chr == CTRL_U {
                                 // clear query
                                 trysp!(emit.send(Event::Clear), "Failed to send clear event");
+                            } else if chr == CTRL_R {
+                                // key up
+                                trysp!(emit.send(Event::KeyDown), "Failed to send key up event");
+                            } else if chr == CTRL_S {
+                                // key down
+                                trysp!(emit.send(Event::KeyUp), "Failed to send key down event");
                             } else if chr == '\n' {
                                 // exit
                                 trysp!(emit.send(Event::Quit(true)),

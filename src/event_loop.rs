@@ -48,6 +48,7 @@ pub struct EventLoop {
     input_stop: Arc<AtomicBool>,
     search: Option<Arc<SearchBase>>,
     pool: ThreadPool,
+    recent: Vec<Arc<String>>,
 }
 
 impl EventLoop {
@@ -69,6 +70,7 @@ impl EventLoop {
             input_stop: input_stop,
             search: None,
             pool: ThreadPool::new(NUM_THREADS),
+            recent: vec![],
         })
     }
 
@@ -137,6 +139,16 @@ impl EventLoop {
 
         for event in self.events.iter() {
             match event {
+                Event::HistoryReady(recent) => {
+                    self.recent = recent;
+                    if self.query.is_empty() {
+                        self.matches = Matches::from_iter(self.recent.iter().cloned());
+                        self.selected = 0;
+                        let size = self.terminal.cols() as usize;
+                        trys!(self.terminal.output_str(self.escape.matches_output(&self.matches, size, self.selected)),
+                              "Failed to output matches");
+                    }
+                }
                 Event::SearchReady(base) => {
                     self.search = Some(Arc::new(base));
                     self.start_query();
@@ -154,9 +166,7 @@ impl EventLoop {
                         self.selected = 0;
                         self.matches = Matches::from_iter(matches);
                         let size = self.terminal.cols() as usize;
-                        trys!(self.terminal.output_str(self.escape.matches_output(&self.matches,
-                                                                                  size,
-                                                                                  self.selected)),
+                        trys!(self.terminal.output_str(self.escape.matches_output(&self.matches, size, self.selected)),
                               "Failed to output matches");
                     }
                 }
@@ -169,10 +179,8 @@ impl EventLoop {
                     if self.selected + 1 < self.matches.len() {
                         self.selected += 1;
                         let size = self.terminal.cols() as usize;
-                        trys!(self.terminal.output_str(self.escape.match_down(&self.matches,
-                                                                              size,
-                                                                              self.selected)),
-                              "Failed to output match down");
+                        trys!(self.terminal.output_str(self.escape.match_down(&self.matches, size, self.selected)),
+                              "Failed to output matches");
                     } else {
                         trys!(self.emit.send(Event::Bell), "Failed to send bell event");
                     }
@@ -181,10 +189,8 @@ impl EventLoop {
                     if self.selected > 0 {
                         self.selected -= 1;
                         let size = self.terminal.cols() as usize;
-                        trys!(self.terminal.output_str(self.escape.match_up(&self.matches,
-                                                                            size,
-                                                                            self.selected)),
-                              "Failed to output match down");
+                        trys!(self.terminal.output_str(self.escape.match_up(&self.matches, size, self.selected)),
+                              "Failed to output matches");
                     } else {
                         trys!(self.emit.send(Event::Bell), "Failed to send bell event");
                     }
@@ -194,7 +200,10 @@ impl EventLoop {
                         trys!(self.terminal.output_str(self.escape.move_back(self.query.len())),
                               "Failed to output to terminal");
                         self.query = Arc::new(format!(""));
-                        self.matches = Matches::from_iter(vec![]);
+                        self.matches = Matches::from_iter(self.recent.iter().cloned());
+                        let size = self.terminal.cols() as usize;
+                        trys!(self.terminal.output_str(self.escape.matches_output(&self.matches, size, self.selected)),
+                              "Failed to output matches");
                     } else {
                         trys!(self.emit.send(Event::Bell), "Failed to send bell event");
                     }
@@ -207,7 +216,10 @@ impl EventLoop {
                         if !self.query.is_empty() {
                             self.start_query();
                         } else {
-                            self.matches = Matches::from_iter(vec![]);
+                            self.matches = Matches::from_iter(self.recent.iter().cloned());
+                            let size = self.terminal.cols() as usize;
+                            trys!(self.terminal.output_str(self.escape.matches_output(&self.matches, size, self.selected)),
+                                  "Failed to output matches");
                         }
                     } else {
                         trys!(self.emit.send(Event::Bell), "Failed to send bell event");
@@ -228,7 +240,7 @@ impl EventLoop {
 
         // draw the best match if it exists
         trys!(self.terminal
-                  .output_str(self.escape.best_match_output(&self.matches, self.selected)),
+                  .output_str(self.escape.best_match_output(&self.matches, self.selected, self.query.is_empty())),
               "Failed to draw best match");
 
         debug!("Flushing output");

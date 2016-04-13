@@ -13,6 +13,7 @@
 // limitations under the License.
 #![feature(io)]
 #![feature(raw)]
+#![feature(alloc)]
 extern crate unicode_width;
 extern crate term;
 extern crate libc;
@@ -21,6 +22,7 @@ extern crate log;
 extern crate env_logger;
 extern crate threadpool;
 extern crate flx;
+extern crate alloc;
 
 use std::mem;
 
@@ -35,6 +37,7 @@ mod terminal;
 mod ui;
 mod threads;
 mod event_loop;
+mod ringvec;
 
 fn main() {
     // init logging

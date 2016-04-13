@@ -17,6 +17,7 @@ use flx::SearchBase;
 
 #[derive(Debug)]
 pub enum Event {
+    HistoryReady(Vec<Arc<String>>),
     SearchReady(SearchBase),
     Input(char),
     Match(Vec<Arc<String>>, Arc<String>),
@@ -32,6 +33,7 @@ impl Event {
     pub fn maybe_clone(&self) -> Option<Event> {
         use ::types::Event::*;
         match self {
+            &HistoryReady(_) => None,
             &SearchReady(_) => None,
             &Input(ref chr) => Some(Input(*chr)),
             &Match(ref matches, ref query) => Some(Match(matches.clone(), query.clone())),
