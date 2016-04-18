@@ -271,7 +271,7 @@ impl Escape {
     }
 
     pub fn render_prompt(&self, rows: usize) -> String {
-        format!("{}{}{}", self.make_space(rows), PROMPT, self.save_cursor())
+        format!("{}{}{}{}", self.make_space(rows), PROMPT, self.save_cursor(), self.clear_screen())
     }
 
     pub fn bell(&self) -> String {
