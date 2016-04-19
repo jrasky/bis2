@@ -37,7 +37,6 @@ mod terminal;
 mod ui;
 mod threads;
 mod event_loop;
-mod ringvec;
 
 fn main() {
     // init logging

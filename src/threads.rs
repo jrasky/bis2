@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::fs::File;
 use std::borrow::Borrow;
 use std::thread::JoinHandle;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use std::iter::FromIterator;
 
@@ -31,7 +31,6 @@ use std::thread;
 use flx::{SearchBase, LineInfo};
 use error::{StrError, StrResult};
 use bis_c;
-use ringvec::RingVec;
 
 use types::*;
 use constants::*;
@@ -80,16 +79,26 @@ fn read_history(emit: Sender<Event>) {
                                            "Cauld not open history file"));
     let mut count = 0.0;
     let mut set: HashMap<Rc<String>, LineInfo> = HashMap::new();
-    let mut short: RingVec<Rc<String>> = RingVec::new(10);
+    let mut short: VecDeque<Rc<String>> = VecDeque::new();
 
     for maybe_line in input_file.lines() {
         if let Ok(line) = maybe_line {
             let line = Rc::new(line);
             let item = set.entry(line.clone()).or_insert(LineInfo::new(line.as_str(), 0.0));
             let old_count = item.get_factor();
-            if old_count == 0.0 {
-                // add to short list
-                short.push(line.clone());
+            let mut contains = false;
+            for short_item in short.iter() {
+                if line == *short_item {
+                    contains = true;
+                    break;
+                }
+            }
+
+            if !contains {
+                short.push_back(line.clone());
+                while short.len() > 10 {
+                    short.pop_front();
+                }
             }
             item.set_factor(old_count + count);
             count += 1.0;
@@ -99,11 +108,8 @@ fn read_history(emit: Sender<Event>) {
     // extract shortlist
     let mut recent = vec![];
 
-    loop {
-        match short.pop() {
-            None => break,
-            Some(item) => recent.push(Arc::new(item.as_ref().clone()))
-        }
+    for item in short.into_iter().rev() {
+        recent.push(Arc::new(item.as_ref().clone()));
     }
 
     // send off recent history

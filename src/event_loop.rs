@@ -201,6 +201,7 @@ impl EventLoop {
                               "Failed to output to terminal");
                         self.query = Arc::new(format!(""));
                         self.matches = Matches::from_iter(self.recent.iter().cloned());
+                        self.selected = 0;
                         let size = self.terminal.cols() as usize;
                         trys!(self.terminal.output_str(self.escape.matches_output(&self.matches, size, self.selected)),
                               "Failed to output matches");
