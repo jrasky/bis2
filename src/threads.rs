@@ -152,30 +152,37 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
                         if chr.is_control() {
                             if chr == EOT {
                                 // stop
+                                trace!("Got EOT");
                                 trysp!(emit.send(Event::Quit(false)),
                                        "Failed to send quit event");
                             } else if chr == CTRL_U {
                                 // clear query
+                                trace!("Got CTRL_U");
                                 trysp!(emit.send(Event::Clear), "Failed to send clear event");
                             } else if chr == CTRL_R {
                                 // key up
+                                trace!("Got CTRL_R");
                                 trysp!(emit.send(Event::KeyDown), "Failed to send key up event");
                             } else if chr == CTRL_S {
                                 // key down
+                                trace!("Got CTRL_S");
                                 trysp!(emit.send(Event::KeyUp), "Failed to send key down event");
                             } else if chr == '\n' {
                                 // exit
+                                trace!("Got newline");
                                 trysp!(emit.send(Event::Quit(true)),
                                        "Failed to send quit signal");
                             } else if chr == ESC {
                                 // escape sequence
+                                trace!("Got ESC");
                                 escape = Some(format!(""));
                             } else if chr == BSPC || chr == DEL {
                                 // backspace
+                                trace!("Got backspace");
                                 trysp!(emit.send(Event::Backspace),
                                        "Failed to send backspace signal");
                             } else {
-                                trace!("Unknown control character {:?}", chr);
+                                debug!("Unknown control character {:?}", chr);
                                 trysp!(emit.send(Event::Bell), "Failed to send bell event");
                             }
                         } else {
