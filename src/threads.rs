@@ -132,14 +132,9 @@ pub fn read_history(completions: MutexGuard<Completions>, emit: Sender<Event>) {
             }
 
             let path_score = if let Some(ref path) = current_path {
-                if old_count == 0.0 {
-                    // only count path score once per time we encounter the line
-                    completions.get_score(&*line, path)
-                } else {
-                    0.0
-                }
+                // count the path score each time we see this line
+                completions.get_score(&*line, path)
             } else {
-                // we have to do this twice because if let is syntax sugar and you can't && with it
                 0.0
             };
 
