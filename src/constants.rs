@@ -13,6 +13,7 @@
 // limitations under the License.
 pub const MATCH_NUMBER: usize = 10;
 pub const NUM_THREADS: usize = 4;
+pub const COMPLETION_SCORE_FACTOR: f32 = 100.0;
 
 pub const EOT: char = '\u{4}';
 pub const CTRL_U: char = '\u{15}';

@@ -13,20 +13,24 @@
 // limitations under the License.
 use threadpool::ThreadPool;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 use std::iter::FromIterator;
 use std::error::Error;
+use std::fs::File;
 
 use std::sync::mpsc;
 use std::raw;
 use std::mem;
+use std::env;
+use std::thread;
 
 use terminal::Terminal;
 use flx::SearchBase;
 use threads;
+use serde_json;
 
 use ui::*;
 use error::*;
@@ -47,6 +51,7 @@ pub struct EventLoop {
     search: Option<Arc<SearchBase>>,
     pool: ThreadPool,
     recent: Vec<Arc<String>>,
+    completions: Option<Arc<Mutex<Completions>>>,
 }
 
 impl EventLoop {
@@ -69,6 +74,7 @@ impl EventLoop {
             search: None,
             pool: ThreadPool::new(NUM_THREADS),
             recent: vec![],
+            completions: None,
         })
     }
 
@@ -137,6 +143,30 @@ impl EventLoop {
 
         for event in self.events.iter() {
             match event {
+                Event::CompletionsReady(completions) => {
+                    // put the completions in a refcell
+                    let guard = Arc::new(Mutex::new(completions));
+
+                    // use a lifetime boundary as to clarify the situation to rustc
+                    let history_emit = self.emit.clone();
+                    let history_guard = guard.clone();
+
+                    thread::spawn(move || {
+                        let history_completions = if let Ok(completions) = history_guard.try_lock() {
+                            completions
+                        } else {
+                            // the main thread grabbed the lock first, and is probably exiting
+                            // do so ourself
+                            debug!("Completions thread failed to grab completions lock");
+                            return
+                        };
+
+                        threads::read_history(history_completions, history_emit);
+                    });
+
+                    // save the completions so we can use them later
+                    self.completions = Some(guard);
+                }
                 Event::HistoryReady(recent) => {
                     self.recent = recent;
                     if self.query.is_empty() {
@@ -250,6 +280,34 @@ impl EventLoop {
             match self.matches.get(self.selected) {
                 None => debug!("No best match"),
                 Some(m) => {
+                    if let Some(ref completions) = self.completions {
+                        if let Ok(path) = env::current_dir() {
+                            if let Ok(mut completions) = completions.try_lock() {
+                                completions.add_completion(m.get().clone(), path);
+
+                                // try to save them
+                                let mut completions_path = env::home_dir().unwrap_or("".into());
+                                completions_path.push(".bis2_completions");
+
+                                trace!("Completions path: {:?}", completions_path);
+
+                                match File::create(completions_path) {
+                                    Ok(mut file) => {
+                                        if let Err(error) = serde_json::to_writer(&mut file, &*completions) {
+                                            warn!("Failed to save completions: {}", error);
+                                        }
+                                    }
+                                    Err(error) => {
+                                        warn!("Failed to open completions file: {}", error);
+                                    }
+                                }
+                            } else {
+                                // the other thread hasn't released completions yet
+                                debug!("Failed to lock completions object");
+                            }
+                        }
+                    }
+
                     trys!(self.terminal.insert_input(m.get()),
                           "Failed to insert input");
                 }

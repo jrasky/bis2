@@ -14,7 +14,7 @@
 use std::io::prelude::*;
 
 use std::io::BufReader;
-use std::sync::Arc;
+use std::sync::{Arc, MutexGuard};
 use std::sync::mpsc::Sender;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::fs::File;
@@ -27,6 +27,8 @@ use std::iter::FromIterator;
 use std::env;
 use std::io;
 use std::thread;
+
+use serde_json;
 
 use flx::{SearchBase, LineInfo};
 use error::{StrError, StrResult};
@@ -45,10 +47,10 @@ pub fn start_threads(emit: Sender<Event>) -> StrResult<(JoinHandle<()>, Arc<Atom
         read_signals(signal_emit);
     });
 
-    // start reading history
-    let history_emit = emit.clone();
+    // start reading completions
+    let completions_emit = emit.clone();
     thread::spawn(move || {
-        read_history(history_emit);
+        read_completions(completions_emit);
     });
 
     // start the input thread
@@ -59,7 +61,30 @@ pub fn start_threads(emit: Sender<Event>) -> StrResult<(JoinHandle<()>, Arc<Atom
     Ok((input_thread, input_stop))
 }
 
-fn read_history(emit: Sender<Event>) {
+fn read_completions(emit: Sender<Event>) {
+    let mut completions_path = env::home_dir().unwrap_or("".into());
+    completions_path.push(".bis2_completions");
+
+    trace!("Completions path: {:?}", completions_path);
+
+    let try_completions_file = File::open(completions_path);
+    if let Ok(completions_file) = try_completions_file {
+        trace!("Reading completions");
+        let completions = trysp!(serde_json::from_reader(BufReader::new(completions_file)),
+                                 "Failed to read completions file");
+
+        trace!("Read completions");
+
+        trysp!(emit.send(Event::CompletionsReady(completions)),
+               "Failed to send completions ready signal");
+    } else {
+        trace!("No completions found");
+        trysp!(emit.send(Event::CompletionsReady(Completions::new())),
+               "Failed to send completions ready signal");
+    }
+}
+
+pub fn read_history(completions: MutexGuard<Completions>, emit: Sender<Event>) {
     let history_path = match env::var("HISTFILE") {
         Ok(path) => path.into(),
         Err(env::VarError::NotPresent) => {
@@ -74,6 +99,11 @@ fn read_history(emit: Sender<Event>) {
     };
 
     trace!("History path: {:?}", history_path);
+
+    // try to get the current path
+    let current_path = env::current_dir().ok();
+
+    trace!("Current path: {:?}", current_path);
 
     let input_file = BufReader::new(trysp!(File::open(history_path),
                                            "Cauld not open history file"));
@@ -100,7 +130,20 @@ fn read_history(emit: Sender<Event>) {
                     short.pop_front();
                 }
             }
-            item.set_factor(old_count + count);
+
+            let path_score = if let Some(ref path) = current_path {
+                if old_count == 0.0 {
+                    // only count path score once per time we encounter the line
+                    completions.get_score(&*line, path)
+                } else {
+                    0.0
+                }
+            } else {
+                // we have to do this twice because if let is syntax sugar and you can't && with it
+                0.0
+            };
+
+            item.set_factor(old_count + count + path_score);
             count += 1.0;
         }
     }

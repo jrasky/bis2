@@ -14,6 +14,8 @@
 #![feature(io)]
 #![feature(raw)]
 #![feature(alloc)]
+#![feature(custom_derive, plugin)]
+#![plugin(serde_macros)]
 extern crate unicode_width;
 extern crate term;
 extern crate libc;
@@ -23,6 +25,7 @@ extern crate env_logger;
 extern crate threadpool;
 extern crate flx;
 extern crate alloc;
+extern crate serde_json;
 
 use std::mem;
 
