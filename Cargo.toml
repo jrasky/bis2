@@ -12,7 +12,7 @@ term = "*"
 log = "*"
 env_logger = "*"
 threadpool = "*"
-flx = {git = "https://github.com/jrasky/flx.git"}
+flx = "*"
 serde = "*"
 serde_json = "*"
 serde_macros = "*"
