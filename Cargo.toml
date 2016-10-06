@@ -15,7 +15,7 @@ threadpool = "*"
 flx = "*"
 serde = "*"
 serde_json = "*"
-serde_macros = "*"
 
 [build-dependencies]
+serde_codegen = "0.8"
 gcc = "*"

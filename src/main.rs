@@ -14,8 +14,6 @@
 #![feature(io)]
 #![feature(raw)]
 #![feature(alloc)]
-#![feature(custom_derive, plugin)]
-#![plugin(serde_macros)]
 extern crate unicode_width;
 extern crate term;
 extern crate libc;
