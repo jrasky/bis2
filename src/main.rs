@@ -24,6 +24,8 @@ extern crate threadpool;
 extern crate flx;
 extern crate alloc;
 extern crate serde_json;
+#[macro_use]
+extern crate serde_derive;
 
 use std::mem;
 

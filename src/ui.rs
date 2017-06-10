@@ -111,7 +111,7 @@ impl Escape {
         let mut strings = HashMap::default();
 
         for (name, value) in info.strings.into_iter() {
-            strings.insert(name, trys!(String::from_utf8(value), "value was not utf-8"));
+            strings.insert(String::from(name), trys!(String::from_utf8(value), "value was not utf-8"));
         }
 
         Ok(Escape { strings: strings })

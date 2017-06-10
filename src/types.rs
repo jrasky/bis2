@@ -20,12 +20,11 @@ use flx::SearchBase;
 use constants::*;
 
 // serde types
-include!(concat!(env!("OUT_DIR"), "/serde_types.rs"));
-// #[derive(Debug, Serialize, Deserialize)]
-// pub struct Completions {
-//     // Map<Line, Vec<Path>>
-//     info: HashMap<String, Vec<(PathBuf, f32)>>
-// }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Completions {
+    // Map<Line, Vec<Path>>
+    info: HashMap<String, Vec<(PathBuf, f32)>>
+}
 
 #[derive(Debug)]
 pub enum Event {
