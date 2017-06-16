@@ -172,8 +172,12 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
     control.insert(format!("[A"), Some(Event::KeyUp));
     control.insert(format!("[B"), Some(Event::KeyDown));
 
+    let chars = Chars {
+        inner: io::stdin()
+    };
+
     // read characters
-    for maybe_chr in io::stdin().chars() {
+    for maybe_chr in chars {
         match maybe_chr {
             Err(_) => {
                 error!("Failed to read input, quitting");
@@ -284,4 +288,56 @@ pub fn start_query(emit: Sender<Event>, base: Arc<SearchBase>, query: Arc<String
         Ok(())
     });
     // don't panic on fail send, events might be already closed
+}
+
+// Copied from the standard library so I can use it in stable
+struct Chars<R> {
+    inner: R
+}
+
+impl<R: io::Read> Iterator for Chars<R> {
+    type Item = Result<char, ()>;
+
+    fn next(&mut self) -> Option<Result<char, ()>> {
+        let first_byte = match read_one_byte(&mut self.inner) {
+            None => return None,
+            Some(Ok(b)) => b,
+            Some(Err(_)) => return Some(Err(()))
+        };
+
+        let width = utf8_char_width(first_byte);
+        
+        if width == 1 { return Some(Ok(first_byte as char)) }
+        if width == 0 { return Some(Err(())) }
+
+        let mut buf = [first_byte, 0, 0, 0];
+        {
+            let mut start = 1;
+            while start < width {
+                match self.inner.read(&mut buf[start..width]) {
+                    Ok(0) => return Some(Err(())),
+                    Ok(n) => start += n,
+                    Err(ref e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(_) => return Some(Err(())),
+                }
+            }
+        }
+
+        Some(match ::std::str::from_utf8(&buf[..width]).ok() {
+            Some(s) => Ok(s.chars().next().unwrap()),
+            None => Err(())
+        })
+    }
+}
+
+fn read_one_byte(reader: &mut Read) -> Option<Result<u8, ()>> {
+    let mut buf = [0];
+    loop {
+        return match reader.read(&mut buf) {
+            Ok(0) => None,
+            Ok(..) => Some(Ok(buf[0])),
+            Err(ref e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(_) => Some(Err(())),
+        };
+    }
 }

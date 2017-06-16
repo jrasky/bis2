@@ -11,9 +11,6 @@
 // WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied. See the
 // License for the specific language concerning governing permissions and
 // limitations under the License.
-#![feature(io)]
-#![feature(raw)]
-#![feature(alloc)]
 extern crate unicode_width;
 extern crate term;
 extern crate libc;
@@ -22,7 +19,6 @@ extern crate log;
 extern crate env_logger;
 extern crate threadpool;
 extern crate flx;
-extern crate alloc;
 extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;

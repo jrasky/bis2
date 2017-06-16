@@ -18,12 +18,9 @@ use std::sync::mpsc::{Sender, Receiver};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 use std::iter::FromIterator;
-use std::error::Error;
 use std::fs::File;
 
 use std::sync::mpsc;
-use std::raw;
-use std::mem;
 use std::env;
 use std::thread;
 
@@ -95,23 +92,7 @@ impl EventLoop {
         // join the thread
         match handle.join() {
             Ok(_) => Ok(()),
-            Err(opaque) => {
-                Err({
-                    let error = opaque.downcast_ref::<StrError>().map(|error: &StrError| {
-                        let dummy = StrError::new("dummy", None);
-                        let value: Box<Error> = Box::new(dummy);
-                        let raw_object: raw::TraitObject = unsafe { mem::transmute(value) };
-                        let synthetic: Box<Error> = unsafe {
-                            mem::transmute(raw::TraitObject {
-                                data: error as *const _ as *mut (),
-                                vtable: raw_object.vtable,
-                            })
-                        };
-                        synthetic
-                    });
-                    StrError::new("Input thread failed", error)
-                })
-            }
+            Err(_) => Err(StrError::new("Input thread failed", None))
         }
     }
 
