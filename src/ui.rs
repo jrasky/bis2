@@ -111,6 +111,7 @@ impl Escape {
         let mut strings = HashMap::default();
 
         for (name, value) in info.strings.into_iter() {
+            trace!("Inserting string {}", name);
             strings.insert(String::from(name), trys!(String::from_utf8(value), "value was not utf-8"));
         }
 
@@ -131,7 +132,7 @@ impl Escape {
     }
 
     pub fn clear_screen(&self) -> String {
-        self.get_string("clr_eos", vec![]).unwrap_or(format!(""))
+        self.get_string("ed", vec![]).unwrap_or(format!(""))
     }
 
     pub fn make_space(&self, rows: usize) -> String {
@@ -181,7 +182,7 @@ impl Escape {
                 trysp!(write!(result,
                               "{}{}",
                               line.render(Some(width), false),
-                              self.get_string("clr_eol", vec![]).unwrap_or(format!(""))),
+                              self.get_string("el", vec![]).unwrap_or(format!(""))),
                        "Writes to strings should not fail");
             }
         }
@@ -197,7 +198,7 @@ impl Escape {
                 trysp!(write!(result,
                               "{}{}",
                               line.render(Some(width), true),
-                              self.get_string("clr_eol", vec![]).unwrap_or(format!(""))),
+                              self.get_string("el", vec![]).unwrap_or(format!(""))),
                        "Writes to strings should not fail");
             }
         }
@@ -231,7 +232,7 @@ impl Escape {
                 trysp!(write!(result,
                               "{}{}",
                               line.render(Some(width), true),
-                              self.get_string("clr_eol", vec![]).unwrap_or(format!(""))),
+                              self.get_string("el", vec![]).unwrap_or(format!(""))),
                        "Writes to strings should not fail");
             }
         }
@@ -247,7 +248,7 @@ impl Escape {
                 trysp!(write!(result,
                               "{}{}",
                               line.render(Some(width), false),
-                              self.get_string("clr_eol", vec![]).unwrap_or(format!(""))),
+                              self.get_string("el", vec![]).unwrap_or(format!(""))),
                        "Writes to strings should not fail");
             }
         }

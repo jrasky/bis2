@@ -192,11 +192,12 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
                 match escape {
                     None => {
                         if chr.is_control() {
-                            if chr == EOT {
+                            if chr == EOT || chr == CTRL_C {
                                 // stop
-                                trace!("Got EOT");
+                                trace!("Got EOT or CTRL_C");
                                 trysp!(emit.send(Event::Quit(false)),
                                        "Failed to send quit event");
+                                break;
                             } else if chr == CTRL_U {
                                 // clear query
                                 trace!("Got CTRL_U");
@@ -209,11 +210,12 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
                                 // key down
                                 trace!("Got CTRL_S");
                                 trysp!(emit.send(Event::KeyUp), "Failed to send key down event");
-                            } else if chr == '\n' {
+                            } else if chr == '\n' || chr == CR {
                                 // exit
                                 trace!("Got newline");
                                 trysp!(emit.send(Event::Quit(true)),
                                        "Failed to send quit signal");
+                                break;
                             } else if chr == ESC {
                                 // escape sequence
                                 trace!("Got ESC");

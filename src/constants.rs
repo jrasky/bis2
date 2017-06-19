@@ -16,6 +16,7 @@ pub const NUM_THREADS: usize = 4;
 pub const COMPLETION_SCORE_FACTOR: f32 = 10.0;
 
 pub const EOT: char = '\u{4}';
+pub const CTRL_C: char = '\u{03}';
 pub const CTRL_U: char = '\u{15}';
 pub const CTRL_R: char = '\u{12}';
 pub const CTRL_S: char = '\u{13}';
@@ -23,6 +24,7 @@ pub const ESC: char = '\u{1b}';
 pub const BEL: char = '\u{7}';
 pub const DEL: char = '\u{7f}';
 pub const BSPC: char = '\u{8}';
+pub const CR: char = '\r';
 
 pub const PROMPT: &'static str = "Match: ";
 pub const FINISH: &'static str = " -> ";

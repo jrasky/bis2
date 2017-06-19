@@ -51,6 +51,9 @@ int bis_prepare_terminal() {
   // update the info variable
   bis_term_info_set = 1;
 
+  // disable signal delivery
+  terminfo_p.c_lflag &= ~ISIG;
+
   // disable canonical mode
   terminfo_p.c_lflag &= ~ICANON;
 

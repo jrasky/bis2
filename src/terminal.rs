@@ -13,7 +13,7 @@
 // limitations under the License.
 use std::io::prelude::*;
 
-use std::io::Stdout;
+use std::io::{Stdout, Stderr};
 
 use std::io;
 
@@ -22,6 +22,7 @@ use bis_c::*;
 
 pub struct Terminal {
     output: Stdout,
+    error: Stderr,
     rows: u16,
     cols: u16,
 }
@@ -38,6 +39,8 @@ impl Terminal {
     pub fn create() -> StrResult<Terminal> {
         let output = io::stdout();
 
+        let error = io::stderr();
+
         trys!(prepare_terminal(), "Failed to prepare terminal");
 
         trys!(mask_sigint(), "Failed to mask sigint");
@@ -45,9 +48,10 @@ impl Terminal {
         let (rows, cols) = trys!(get_terminal_size(), "Failed to get terminal size");
 
         Ok(Terminal {
-            output: output,
-            rows: rows,
-            cols: cols,
+            output,
+            error,
+            rows,
+            cols,
         })
     }
 
@@ -69,6 +73,10 @@ impl Terminal {
     }
 
     pub fn insert_input<T: AsRef<str>>(&mut self, input: T) -> StrResult<()> {
-        Ok(trys!(insert_input(input.as_ref()), "Failed to insert input"))
+        if cfg!(feature = "no_ioctl") {
+            Ok(trys!(write!(self.error, "{}", input.as_ref()), "Failed to write to stderr"))
+        } else {
+            Ok(trys!(insert_input(input.as_ref()), "Failed to insert input"))
+        }
     }
 }

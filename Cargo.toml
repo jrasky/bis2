@@ -19,3 +19,9 @@ serde_derive = "*"
 
 [build-dependencies]
 gcc = "*"
+
+[features]
+# Disable the use of an ioctl to insert input on the terminal. When this feature is active,
+# output is printed on stderr instead. Manipulate READLINE_LINE and READLINE_POINT to report
+# the output to the user.
+no_ioctl = []

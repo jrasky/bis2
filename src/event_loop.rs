@@ -79,10 +79,6 @@ impl EventLoop {
         // prompt the input thread to stop
         self.input_stop.store(true, Ordering::Relaxed);
 
-        // insert a bogus byte to wake it up
-        trys!(self.terminal.insert_input(" "),
-              "Failed to insert bogus byte");
-
         // get our input thread handle
         let handle = match self.input_thread.take() {
             None => return Err(StrError::new("No input thread handle", None)),
