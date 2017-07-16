@@ -18,10 +18,8 @@ use std::sync::{Arc, MutexGuard};
 use std::sync::mpsc::Sender;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::fs::File;
-use std::borrow::Borrow;
 use std::thread::JoinHandle;
 use std::collections::{HashMap, VecDeque};
-use std::rc::Rc;
 use std::iter::FromIterator;
 
 use std::env;
@@ -94,35 +92,34 @@ pub fn read_history(completions: MutexGuard<Completions>, emit: Sender<Event>) {
 
     let input_file = BufReader::new(File::open(history_path).expect("Failed to open history file"));
     let mut count = 0.0;
-    let mut set: HashMap<Rc<String>, LineInfo> = HashMap::new();
-    let mut short: VecDeque<Rc<String>> = VecDeque::new();
+    let mut set: HashMap<String, LineInfo> = HashMap::new();
+    let mut short: VecDeque<String> = VecDeque::new();
 
     for maybe_line in input_file.lines() {
         if let Ok(line) = maybe_line {
-            let line = Rc::new(line);
             let item = set.entry(line.clone()).or_insert(LineInfo::new(line.as_str(), 0.0));
             let old_count = item.get_factor();
-            let mut contains = false;
-            for short_item in short.iter() {
-                if line == *short_item {
-                    contains = true;
-                    break;
-                }
-            }
-
-            if !contains {
-                short.push_back(line.clone());
-                while short.len() > 10 {
-                    short.pop_front();
-                }
-            }
 
             let path_score = if let Some(ref path) = current_path {
                 // count the path score each time we see this line
-                completions.get_score(&*line, path)
+                completions.get_score(&line, path)
             } else {
                 0.0
             };
+
+            let maybe_index = short.iter().enumerate()
+                .find(|&(_, ref item)| line == **item)
+                .map(|(index, _)| index);
+
+            if let Some(index) = maybe_index {
+                short.remove(index);
+            }
+
+            short.push_back(line);
+
+            while short.len() > 10 {
+                short.pop_front();
+            }
 
             item.set_factor(old_count + count + path_score);
             count += 1.0;
@@ -133,7 +130,7 @@ pub fn read_history(completions: MutexGuard<Completions>, emit: Sender<Event>) {
     let mut recent = vec![];
 
     for item in short.into_iter().rev() {
-        recent.push(Arc::new(item.as_ref().clone()));
+        recent.push(item);
     }
 
     // send off recent history
@@ -248,9 +245,9 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
     }
 }
 
-pub fn start_query(emit: Sender<Event>, base: Arc<SearchBase>, query: Arc<String>) {
-    let result = base.query::<&String>(query.borrow(), MATCH_NUMBER);
-    let _ = emit.send(Event::Match(result, query)).and_then(|_| {
+pub fn start_query(emit: Sender<Event>, base: Arc<SearchBase>, query: String) {
+    let result = base.query(&query, MATCH_NUMBER);
+    let _ = emit.send(Event::Match(result.into_iter().map(|s| s.into()).collect(), query)).and_then(|_| {
         trace!("Finished query");
         Ok(())
     });

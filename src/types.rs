@@ -11,7 +11,6 @@
 // WARRANTIES OR CONDITIONS OF ANY KIND, either expressed or implied. See the
 // License for the specific language concerning governing permissions and
 // limitations under the License.
-use std::sync::Arc;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -29,10 +28,10 @@ pub struct Completions {
 #[derive(Debug)]
 pub enum Event {
     CompletionsReady(Completions),
-    HistoryReady(Vec<Arc<String>>),
+    HistoryReady(Vec<String>),
     SearchReady(SearchBase),
     Input(char),
-    Match(Vec<Arc<String>>, Arc<String>),
+    Match(Vec<String>, String),
     Quit(bool),
     KeyUp,
     KeyDown,

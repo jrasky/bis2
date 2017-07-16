@@ -18,7 +18,6 @@ use std::collections::HashMap;
 use std::borrow::Borrow;
 use std::fmt::Write;
 use std::iter::FromIterator;
-use std::sync::Arc;
 
 use std::cmp;
 
@@ -36,7 +35,7 @@ pub enum TermStack {
 }
 
 pub struct Line {
-    line: Arc<String>,
+    line: String,
 }
 
 pub struct Escape {
@@ -47,9 +46,9 @@ pub struct Matches {
     matches: Vec<Line>,
 }
 
-impl FromIterator<Arc<String>> for Matches {
+impl FromIterator<String> for Matches {
     fn from_iter<T>(matches: T) -> Matches
-        where T: IntoIterator<Item = Arc<String>>
+        where T: IntoIterator<Item = String>
     {
         Matches { matches: matches.into_iter().map(|item| Line::new(item)).collect() }
     }
@@ -76,7 +75,7 @@ impl Matches {
 }
 
 impl Line {
-    pub fn new(line: Arc<String>) -> Line {
+    pub fn new(line: String) -> Line {
         Line { line: line }
     }
 

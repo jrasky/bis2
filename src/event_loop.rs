@@ -40,13 +40,13 @@ pub struct EventLoop {
     escape: Escape,
     matches: Matches,
     selected: usize,
-    query: Arc<String>,
+    query: String,
     success: bool,
     input_thread: Option<JoinHandle<()>>,
     input_stop: Arc<AtomicBool>,
     search: Option<Arc<SearchBase>>,
     pool: ThreadPool,
-    recent: Vec<Arc<String>>,
+    recent: Vec<String>,
     completions: Option<Arc<Mutex<Completions>>>,
 }
 
@@ -62,7 +62,7 @@ impl EventLoop {
             escape: Escape::create(),
             matches: Matches::from_iter(vec![]),
             selected: 0,
-            query: Arc::new(format!("")),
+            query: "".into(),
             success: false,
             input_thread: Some(input_thread),
             input_stop: input_stop,
@@ -148,7 +148,7 @@ impl EventLoop {
                     self.start_query();
                 }
                 Event::Input(chr) => {
-                    Arc::make_mut(&mut self.query).push(chr);
+                    self.query.push(chr);
                     self.terminal.output_str(self.escape.query_output(chr));
                     self.start_query();
                 }
@@ -188,7 +188,7 @@ impl EventLoop {
                 Event::Clear => {
                     if !self.query.is_empty() {
                         self.terminal.output_str(self.escape.move_back(self.query.len()));
-                        self.query = Arc::new(format!(""));
+                        self.query = "".into();
                         self.matches = Matches::from_iter(self.recent.iter().cloned());
                         self.selected = 0;
                         let size = self.terminal.cols() as usize;
@@ -199,7 +199,7 @@ impl EventLoop {
                 }
                 Event::Backspace => {
                     if !self.query.is_empty() {
-                        Arc::make_mut(&mut self.query).pop();
+                        self.query.pop();
                         self.terminal.output_str(self.escape.move_back(1));
                         if !self.query.is_empty() {
                             self.start_query();
