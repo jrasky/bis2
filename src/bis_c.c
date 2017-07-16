@@ -15,7 +15,6 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/ioctl.h>
-#include <signal.h>
 #include <errno.h>
 
 struct bis_error_info_t {

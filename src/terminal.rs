@@ -17,7 +17,6 @@ use std::io::{Stdout, Stderr};
 
 use std::io;
 
-use error::*;
 use bis_c::*;
 
 pub struct Terminal {
@@ -29,28 +28,26 @@ pub struct Terminal {
 
 impl Drop for Terminal {
     fn drop(&mut self) {
-        restore_terminal().expect("Failed to restore terminal");
-
-        // signal masking is per-thread, so we don't need to unmask it on exit
+        restore_terminal();
     }
 }
 
 impl Terminal {
-    pub fn create() -> StrResult<Terminal> {
+    pub fn create() -> Terminal {
         let output = io::stdout();
 
         let error = io::stderr();
 
-        trys!(prepare_terminal(), "Failed to prepare terminal");
+        prepare_terminal();
 
-        let (rows, cols) = trys!(get_terminal_size(), "Failed to get terminal size");
+        let (rows, cols) = get_terminal_size();
 
-        Ok(Terminal {
+        Terminal {
             output,
             error,
             rows,
             cols,
-        })
+        }
     }
 
     pub fn rows(&self) -> u16 {
@@ -61,16 +58,15 @@ impl Terminal {
         self.cols
     }
 
-    pub fn output_str<T: AsRef<str>>(&mut self, s: T) -> StrResult<()> {
-        Ok(trys!(write!(self.output, "{}", s.as_ref()),
-                 "Failed to write str to output"))
+    pub fn output_str<T: AsRef<str>>(&mut self, s: T) {
+        write!(self.output, "{}", s.as_ref()).expect("Failed to write output");
     }
 
-    pub fn flush(&mut self) -> StrResult<()> {
-        Ok(trys!(self.output.flush(), "Failed to flush output"))
+    pub fn flush(&mut self) {
+        self.output.flush().expect("Failed to flush output");
     }
 
-    pub fn insert_input<T: AsRef<str>>(&mut self, input: T) -> StrResult<()> {
-        Ok(trys!(write!(self.error, "{}", input.as_ref()), "Failed to write to stderr"))
+    pub fn insert_input<T: AsRef<str>>(&mut self, input: T) {
+        write!(self.error, "{}", input.as_ref()).expect("Failed to write to stderr")
     }
 }

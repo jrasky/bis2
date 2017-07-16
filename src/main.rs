@@ -28,8 +28,6 @@ use std::mem;
 use event_loop::EventLoop;
 
 mod constants;
-#[macro_use]
-mod error;
 mod types;
 mod bis_c;
 mod terminal;
@@ -39,30 +37,13 @@ mod event_loop;
 
 fn main() {
     // init logging
-    match env_logger::init() {
-        Ok(_) => {
-            trace!("Successfully initialized logging");
-        }
-        Err(e) => {
-            panic!("Failed to initialize logging: {}", e);
-        }
-    }
+    env_logger::init().expect("Failed to initialize logging");
 
     // create the event loop
-    let mut ev_loop = match EventLoop::create() {
-        Ok(ev) => ev,
-        Err(e) => panic!("Failed to create event loop: {}", e),
-    };
+    let mut ev_loop = EventLoop::create();
 
     // run the event loop
-    match ev_loop.run() {
-        Ok(_) => {
-            debug!("Event loop exited successfully");
-        }
-        Err(e) => {
-            panic!("Event loop failed: {}", e);
-        }
-    }
+    ev_loop.run();
 
     // destroy the event loop
     mem::drop(ev_loop);

@@ -31,12 +31,11 @@ use std::thread;
 use serde_json;
 
 use flx::{SearchBase, LineInfo};
-use error::{StrError, StrResult};
 
 use types::*;
 use constants::*;
 
-pub fn start_threads(emit: Sender<Event>) -> StrResult<(JoinHandle<()>, Arc<AtomicBool>)> {
+pub fn start_threads(emit: Sender<Event>) -> (JoinHandle<()>, Arc<AtomicBool>) {
     // start reading completions
     let completions_emit = emit.clone();
     thread::spawn(move || {
@@ -48,7 +47,7 @@ pub fn start_threads(emit: Sender<Event>) -> StrResult<(JoinHandle<()>, Arc<Atom
     let stop = input_stop.clone();
     let input_thread = thread::spawn(|| read_input(emit, stop));
 
-    Ok((input_thread, input_stop))
+    (input_thread, input_stop)
 }
 
 fn read_completions(emit: Sender<Event>) {
@@ -60,17 +59,15 @@ fn read_completions(emit: Sender<Event>) {
     let try_completions_file = File::open(completions_path);
     if let Ok(completions_file) = try_completions_file {
         trace!("Reading completions");
-        let completions = trysp!(serde_json::from_reader(BufReader::new(completions_file)),
-                                 "Failed to read completions file");
+        let completions = serde_json::from_reader(BufReader::new(completions_file))
+            .expect("Failed to read completions file");
 
         trace!("Read completions");
 
-        trysp!(emit.send(Event::CompletionsReady(completions)),
-               "Failed to send completions ready signal");
+        emit.send(Event::CompletionsReady(completions)).unwrap();
     } else {
         trace!("No completions found");
-        trysp!(emit.send(Event::CompletionsReady(Completions::new())),
-               "Failed to send completions ready signal");
+        emit.send(Event::CompletionsReady(Completions::new())).unwrap();
     }
 }
 
@@ -95,8 +92,7 @@ pub fn read_history(completions: MutexGuard<Completions>, emit: Sender<Event>) {
 
     trace!("Current path: {:?}", current_path);
 
-    let input_file = BufReader::new(trysp!(File::open(history_path),
-                                           "Cauld not open history file"));
+    let input_file = BufReader::new(File::open(history_path).expect("Failed to open history file"));
     let mut count = 0.0;
     let mut set: HashMap<Rc<String>, LineInfo> = HashMap::new();
     let mut short: VecDeque<Rc<String>> = VecDeque::new();
@@ -141,15 +137,13 @@ pub fn read_history(completions: MutexGuard<Completions>, emit: Sender<Event>) {
     }
 
     // send off recent history
-    trysp!(emit.send(Event::HistoryReady(recent)),
-           "Failed to emit history ready signal");
+    emit.send(Event::HistoryReady(recent)).unwrap();
 
     // create the search base
     let base = SearchBase::from_iter(set.into_iter().map(|(_, info)| info));
 
     // if this fails, we can't search anything
-    trysp!(emit.send(Event::SearchReady(base)),
-           "Failed to emit search ready signal");
+    emit.send(Event::SearchReady(base)).unwrap();
 }
 
 fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
@@ -171,7 +165,7 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
         match maybe_chr {
             Err(_) => {
                 error!("Failed to read input, quitting");
-                trysp!(emit.send(Event::Quit(false)), "Failed to emit quit signal");
+                emit.send(Event::Quit(false)).unwrap();
                 break;
             }
             Ok(ESC) => {
@@ -185,26 +179,24 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
                             if chr == EOT || chr == CTRL_C {
                                 // stop
                                 trace!("Got EOT or CTRL_C");
-                                trysp!(emit.send(Event::Quit(false)),
-                                       "Failed to send quit event");
+                                emit.send(Event::Quit(false)).unwrap();
                                 break;
                             } else if chr == CTRL_U {
                                 // clear query
                                 trace!("Got CTRL_U");
-                                trysp!(emit.send(Event::Clear), "Failed to send clear event");
+                                emit.send(Event::Clear).unwrap();
                             } else if chr == CTRL_R {
                                 // key up
                                 trace!("Got CTRL_R");
-                                trysp!(emit.send(Event::KeyDown), "Failed to send key up event");
+                                emit.send(Event::KeyDown).unwrap();
                             } else if chr == CTRL_S {
                                 // key down
                                 trace!("Got CTRL_S");
-                                trysp!(emit.send(Event::KeyUp), "Failed to send key down event");
+                                emit.send(Event::KeyUp).unwrap();
                             } else if chr == '\n' || chr == CR {
                                 // exit
                                 trace!("Got newline");
-                                trysp!(emit.send(Event::Quit(true)),
-                                       "Failed to send quit signal");
+                                emit.send(Event::Quit(true)).unwrap();
                                 break;
                             } else if chr == ESC {
                                 // escape sequence
@@ -213,14 +205,13 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
                             } else if chr == BSPC || chr == DEL {
                                 // backspace
                                 trace!("Got backspace");
-                                trysp!(emit.send(Event::Backspace),
-                                       "Failed to send backspace signal");
+                                emit.send(Event::Backspace).unwrap();
                             } else {
                                 debug!("Unknown control character {:?}", chr);
-                                trysp!(emit.send(Event::Bell), "Failed to send bell event");
+                                emit.send(Event::Bell).unwrap();
                             }
                         } else {
-                            trysp!(emit.send(Event::Input(chr)), "Failed to send character");
+                            emit.send(Event::Input(chr)).unwrap();
                         }
                     }
                     Some(mut seq) => {
@@ -229,8 +220,8 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
                         match control.get(&seq) {
                             None => {
                                 // no possible escape sequence like this
-                                trysp!(emit.send(Event::Bell), "Failed to send bell event");
-                                trysp!(emit.send(Event::Input(chr)), "Failed to send character");
+                                emit.send(Event::Bell).unwrap();
+                                emit.send(Event::Input(chr)).unwrap();
                                 escape = None;
                             }
                             Some(&None) => {
@@ -239,13 +230,8 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
                             }
                             Some(&Some(ref event)) => {
                                 // send the appropriate event
-                                let cloned = trysp!(event.maybe_clone()
-                                                         .ok_or(StrError::new("Event {:?} \
-                                                                               could not be \
-                                                                               cloned",
-                                                                              None)),
-                                                    "Failed to create event");
-                                trysp!(emit.send(cloned), "Failed to send escape event");
+                                let cloned = event.maybe_clone().unwrap();
+                                emit.send(cloned).unwrap();
                                 escape = None;
                             }
                         }

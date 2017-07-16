@@ -14,15 +14,11 @@
 
 // bindings into bis_c.c
 
-use error::StrResult;
-
 mod c {
     use libc::*;
 
     use std::ffi;
     use std::io;
-
-    use error::StrError;
 
     #[repr(C)]
     struct bis_error_info_t {
@@ -44,38 +40,48 @@ mod c {
         pub fn bis_get_terminal_size(size: *mut bis_term_size_t) -> c_int;
     }
 
-    pub unsafe fn get_bis_error() -> StrError {
-        let error_cstr = ffi::CStr::from_ptr(bis_error_info.error_str);
-        StrError::new(error_cstr.to_string_lossy().into_owned(),
-                      match bis_error_info.is_errno {
-                          1 => Some(Box::new(io::Error::last_os_error())),
-                          _ => None,
-                      })
+    pub fn c_panic() -> ! {
+        unsafe {
+            let error = ffi::CStr::from_ptr(bis_error_info.error_str).to_string_lossy();
+
+            if bis_error_info.is_errno == 1 {
+                panic!("{}: {}", error, io::Error::last_os_error());
+            } else {
+                panic!("{}", error);
+            }
+        }
     }
 }
 
-pub fn prepare_terminal() -> StrResult<()> {
-    debug!("Preparing terminal");
-    match unsafe { c::bis_prepare_terminal() } {
-        0 => Ok(()),
-        _ => Err(unsafe { c::get_bis_error() }),
+pub fn prepare_terminal() {
+    unsafe {
+        debug!("Preparing terminal");
+
+        if c::bis_prepare_terminal() != 0 {
+            c::c_panic();
+        }
     }
 }
 
-pub fn restore_terminal() -> StrResult<()> {
-    debug!("Restoring terminal");
-    match unsafe { c::bis_restore_terminal() } {
-        0 => Ok(()),
-        _ => Err(unsafe { c::get_bis_error() }),
+pub fn restore_terminal() {
+    unsafe {
+        debug!("Restoring terminal");
+
+        if c::bis_restore_terminal() != 0 {
+            c::c_panic();
+        }
     }
 }
 
-pub fn get_terminal_size() -> StrResult<(u16, u16)> {
-    debug!("Getting terminal size");
-    let mut term_size = c::bis_term_size_t { rows: 0, cols: 0 };
+pub fn get_terminal_size() -> (u16, u16) {
+    unsafe {
+        debug!("Getting terminal size");
+        let mut term_size = c::bis_term_size_t { rows: 0, cols: 0 };
 
-    match unsafe { c::bis_get_terminal_size(&mut term_size) } {
-        0 => Ok((term_size.rows, term_size.cols)),
-        _ => Err(unsafe { c::get_bis_error() }),
+        if c::bis_get_terminal_size(&mut term_size) != 0 {
+            c::c_panic();
+        }
+
+        (term_size.rows, term_size.cols)
     }
 }

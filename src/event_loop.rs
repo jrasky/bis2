@@ -30,7 +30,6 @@ use threads;
 use serde_json;
 
 use ui::*;
-use error::*;
 use types::*;
 use constants::*;
 
@@ -52,16 +51,15 @@ pub struct EventLoop {
 }
 
 impl EventLoop {
-    pub fn create() -> StrResult<EventLoop> {
+    pub fn create() -> EventLoop {
         let (emit, events) = mpsc::channel();
-        let (input_thread, input_stop) = trys!(threads::start_threads(emit.clone()),
-                                               "Failed to start threads");
+        let (input_thread, input_stop) = threads::start_threads(emit.clone());
 
-        Ok(EventLoop {
+        EventLoop {
             emit: emit,
             events: events,
-            terminal: trys!(Terminal::create(), "Failed to create terminal instance"),
-            escape: trys!(Escape::create(), "Failed to create escape instance"),
+            terminal: Terminal::create(),
+            escape: Escape::create(),
             matches: Matches::from_iter(vec![]),
             selected: 0,
             query: Arc::new(format!("")),
@@ -72,24 +70,18 @@ impl EventLoop {
             pool: ThreadPool::new(NUM_THREADS),
             recent: vec![],
             completions: None,
-        })
+        }
     }
 
-    fn stop_threads(&mut self) -> StrResult<()> {
+    fn stop_threads(&mut self) {
         // prompt the input thread to stop
         self.input_stop.store(true, Ordering::Relaxed);
 
         // get our input thread handle
-        let handle = match self.input_thread.take() {
-            None => return Err(StrError::new("No input thread handle", None)),
-            Some(handle) => handle,
-        };
+        let handle = self.input_thread.take().expect("No input thread handle");
 
         // join the thread
-        match handle.join() {
-            Ok(_) => Ok(()),
-            Err(_) => Err(StrError::new("Input thread failed", None))
-        }
+        handle.join().expect("Input thread failed");
     }
 
     fn start_query(&self) {
@@ -109,14 +101,12 @@ impl EventLoop {
         }
     }
 
-    pub fn run(&mut self) -> StrResult<()> {
+    pub fn run(&mut self) {
         // draw the prompt
         let size = self.terminal.rows() as usize;
-        trys!(self.terminal.output_str(self.escape.render_prompt(size)),
-              "Failed to render prompt");
+        self.terminal.output_str(self.escape.render_prompt(size));
 
-        // flush the terminal
-        trys!(self.terminal.flush(), "Failed to flush terminal");
+        self.terminal.flush();
 
         for event in self.events.iter() {
             match event {
@@ -150,8 +140,7 @@ impl EventLoop {
                         self.matches = Matches::from_iter(self.recent.iter().cloned());
                         self.selected = 0;
                         let size = self.terminal.cols() as usize;
-                        trys!(self.terminal.output_str(self.escape.matches_output(&self.matches, size, self.selected)),
-                              "Failed to output matches");
+                        self.terminal.output_str(self.escape.matches_output(&self.matches, size, self.selected));
                     }
                 }
                 Event::SearchReady(base) => {
@@ -160,8 +149,7 @@ impl EventLoop {
                 }
                 Event::Input(chr) => {
                     Arc::make_mut(&mut self.query).push(chr);
-                    trys!(self.terminal.output_str(self.escape.query_output(chr)),
-                          "Failed to output character");
+                    self.terminal.output_str(self.escape.query_output(chr));
                     self.start_query();
                 }
                 Event::Match(matches, query) => {
@@ -171,8 +159,7 @@ impl EventLoop {
                         self.selected = 0;
                         self.matches = Matches::from_iter(matches);
                         let size = self.terminal.cols() as usize;
-                        trys!(self.terminal.output_str(self.escape.matches_output(&self.matches, size, self.selected)),
-                              "Failed to output matches");
+                        self.terminal.output_str(self.escape.matches_output(&self.matches, size, self.selected));
                     }
                 }
                 Event::Quit(success) => {
@@ -184,73 +171,64 @@ impl EventLoop {
                     if self.selected + 1 < self.matches.len() {
                         self.selected += 1;
                         let size = self.terminal.cols() as usize;
-                        trys!(self.terminal.output_str(self.escape.match_down(&self.matches, size, self.selected)),
-                              "Failed to output matches");
+                        self.terminal.output_str(self.escape.match_down(&self.matches, size, self.selected));
                     } else {
-                        trys!(self.emit.send(Event::Bell), "Failed to send bell event");
+                        self.emit.send(Event::Bell).unwrap();
                     }
                 }
                 Event::KeyUp => {
                     if self.selected > 0 {
                         self.selected -= 1;
                         let size = self.terminal.cols() as usize;
-                        trys!(self.terminal.output_str(self.escape.match_up(&self.matches, size, self.selected)),
-                              "Failed to output matches");
+                        self.terminal.output_str(self.escape.match_up(&self.matches, size, self.selected));
                     } else {
-                        trys!(self.emit.send(Event::Bell), "Failed to send bell event");
+                        self.emit.send(Event::Bell).unwrap();
                     }
                 }
                 Event::Clear => {
                     if !self.query.is_empty() {
-                        trys!(self.terminal.output_str(self.escape.move_back(self.query.len())),
-                              "Failed to output to terminal");
+                        self.terminal.output_str(self.escape.move_back(self.query.len()));
                         self.query = Arc::new(format!(""));
                         self.matches = Matches::from_iter(self.recent.iter().cloned());
                         self.selected = 0;
                         let size = self.terminal.cols() as usize;
-                        trys!(self.terminal.output_str(self.escape.matches_output(&self.matches, size, self.selected)),
-                              "Failed to output matches");
+                        self.terminal.output_str(self.escape.matches_output(&self.matches, size, self.selected));
                     } else {
-                        trys!(self.emit.send(Event::Bell), "Failed to send bell event");
+                        self.emit.send(Event::Bell).unwrap();
                     }
                 }
                 Event::Backspace => {
                     if !self.query.is_empty() {
                         Arc::make_mut(&mut self.query).pop();
-                        trys!(self.terminal.output_str(self.escape.move_back(1)),
-                              "Failed to output to terminal");
+                        self.terminal.output_str(self.escape.move_back(1));
                         if !self.query.is_empty() {
                             self.start_query();
                         } else {
                             self.matches = Matches::from_iter(self.recent.iter().cloned());
                             let size = self.terminal.cols() as usize;
-                            trys!(self.terminal.output_str(self.escape.matches_output(&self.matches, size, self.selected)),
-                                  "Failed to output matches");
+                            self.terminal.output_str(self.escape.matches_output(&self.matches, size, self.selected));
                         }
                     } else {
-                        trys!(self.emit.send(Event::Bell), "Failed to send bell event");
+                        self.emit.send(Event::Bell).unwrap();
                     }
                 }
                 Event::Bell => {
-                    trys!(self.terminal.output_str(self.escape.bell()),
-                          "Failed to output bell");
+                    self.terminal.output_str(self.escape.bell());
                 }
             }
 
             debug!("Flushing output");
-            trys!(self.terminal.flush(), "Failed to flush terminal");
+            self.terminal.flush();
         }
 
         // stop the input thread
-        trys!(self.stop_threads(), "Failed to stop threads");
+        self.stop_threads();
 
         // draw the best match if it exists
-        trys!(self.terminal
-                  .output_str(self.escape.best_match_output(&self.matches, self.selected, self.query.is_empty())),
-              "Failed to draw best match");
+        self.terminal.output_str(self.escape.best_match_output(&self.matches, self.selected, self.query.is_empty()));
 
         debug!("Flushing output");
-        trys!(self.terminal.flush(), "Failed to flush terminal");
+        self.terminal.flush();
 
         // insert the successful match onto the terminal input buffer
         if self.success {
@@ -285,13 +263,9 @@ impl EventLoop {
                         }
                     }
 
-                    trys!(self.terminal.insert_input(m.get()),
-                          "Failed to insert input");
+                    self.terminal.insert_input(m.get());
                 }
             }
         }
-
-        // success
-        Ok(())
     }
 }

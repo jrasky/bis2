@@ -23,7 +23,6 @@ use std::sync::Arc;
 use std::cmp;
 
 use constants::*;
-use error::*;
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum TermStack {
@@ -69,8 +68,7 @@ impl Matches {
         let mut result = format!("");
 
         for (i, line) in self.matches.iter().enumerate() {
-            trysp!(write!(result, "{}", line.render(Some(width), i == selected)),
-                   "Writes to strings should not fail");
+            write!(result, "{}", line.render(Some(width), i == selected)).unwrap();
         }
 
         result
@@ -106,16 +104,16 @@ impl Line {
 }
 
 impl Escape {
-    pub fn create() -> StrResult<Escape> {
-        let info = trys!(TermInfo::from_env(), "Failed to get TermInfo");
+    pub fn create() -> Escape {
+        let info = TermInfo::from_env().expect("Failed to get terminfo");
         let mut strings = HashMap::default();
 
         for (name, value) in info.strings.into_iter() {
             trace!("Inserting string {}", name);
-            strings.insert(String::from(name), trys!(String::from_utf8(value), "value was not utf-8"));
+            strings.insert(String::from(name), String::from_utf8(value).expect("String was not utf-8"));
         }
 
-        Ok(Escape { strings: strings })
+        Escape { strings: strings }
     }
 
     fn cursor_up(&self, by: usize) -> String {
@@ -166,10 +164,7 @@ impl Escape {
         let mut result = format!("");
 
         // move down to the line before the last selection
-        trysp!(write!(result,
-                      "{}",
-                      String::from_iter(vec!['\n'; selected - 1].into_iter())),
-               "Writes to strings should not fail");
+        write!(result, "{}", String::from_iter(vec!['\n'; selected - 1].into_iter())).unwrap();
 
         // render the last line as non-selected
         match matches.get(selected - 1) {
@@ -179,11 +174,9 @@ impl Escape {
                 return format!("");
             }
             Some(line) => {
-                trysp!(write!(result,
-                              "{}{}",
-                              line.render(Some(width), false),
-                              self.get_string("el", vec![]).unwrap_or(format!(""))),
-                       "Writes to strings should not fail");
+                write!(result, "{}{}",
+                    line.render(Some(width), false),
+                    self.get_string("el", vec![]).unwrap_or(format!(""))).unwrap();
             }
         }
 
@@ -195,17 +188,14 @@ impl Escape {
                 return format!("");
             }
             Some(line) => {
-                trysp!(write!(result,
-                              "{}{}",
-                              line.render(Some(width), true),
-                              self.get_string("el", vec![]).unwrap_or(format!(""))),
-                       "Writes to strings should not fail");
+                write!(result, "{}{}",
+                    line.render(Some(width), true),
+                    self.get_string("el", vec![]).unwrap_or(format!(""))).unwrap();
             }
         }
 
         // restore the cursor
-        trysp!(write!(result, "{}", self.restore_cursor()),
-               "Writes to strings should not fail");
+        write!(result, "{}", self.restore_cursor()).unwrap();
 
         // return the result
         result
@@ -216,10 +206,8 @@ impl Escape {
         let mut result = format!("");
 
         // move down to the line before the last selection
-        trysp!(write!(result,
-                      "{}",
-                      String::from_iter(vec!['\n'; selected].into_iter())),
-               "Writes to strings should not fail");
+        write!(result, "{}",
+            String::from_iter(vec!['\n'; selected].into_iter())).unwrap();
 
         // render the last line as selected
         match matches.get(selected) {
@@ -229,11 +217,9 @@ impl Escape {
                 return format!("");
             }
             Some(line) => {
-                trysp!(write!(result,
-                              "{}{}",
-                              line.render(Some(width), true),
-                              self.get_string("el", vec![]).unwrap_or(format!(""))),
-                       "Writes to strings should not fail");
+                write!(result, "{}{}",
+                    line.render(Some(width), true),
+                    self.get_string("el", vec![]).unwrap_or(format!(""))).unwrap();
             }
         }
 
@@ -245,17 +231,14 @@ impl Escape {
                 return format!("");
             }
             Some(line) => {
-                trysp!(write!(result,
-                              "{}{}",
-                              line.render(Some(width), false),
-                              self.get_string("el", vec![]).unwrap_or(format!(""))),
-                       "Writes to strings should not fail");
+                write!(result, "{}{}",
+                    line.render(Some(width), false),
+                    self.get_string("el", vec![]).unwrap_or(format!(""))).unwrap();
             }
         }
 
         // restore the cursor
-        trysp!(write!(result, "{}", self.restore_cursor()),
-               "Writes to strings should not fail");
+        write!(result, "{}", self.restore_cursor()).unwrap();
 
         // return the result
         result
