@@ -14,8 +14,6 @@
 
 // bindings into bis_c.c
 
-use std::ffi::CString;
-
 use error::StrResult;
 
 mod c {
@@ -44,9 +42,6 @@ mod c {
         pub fn bis_prepare_terminal() -> c_int;
         pub fn bis_restore_terminal() -> c_int;
         pub fn bis_get_terminal_size(size: *mut bis_term_size_t) -> c_int;
-        pub fn bis_mask_sigint() -> c_int;
-        pub fn bis_wait_sigint() -> c_int;
-        pub fn bis_insert_input(input: *const c_char) -> c_int;
     }
 
     pub unsafe fn get_bis_error() -> StrError {
@@ -73,37 +68,6 @@ pub fn restore_terminal() -> StrResult<()> {
         0 => Ok(()),
         _ => Err(unsafe { c::get_bis_error() }),
     }
-}
-
-pub fn mask_sigint() -> StrResult<()> {
-    debug!("Masking sigint");
-    match unsafe { c::bis_mask_sigint() } {
-        0 => Ok(()),
-        _ => Err(unsafe { c::get_bis_error() }),
-    }
-}
-
-pub fn wait_sigint() -> StrResult<()> {
-    debug!("Waiting for sigint");
-    match unsafe { c::bis_wait_sigint() } {
-        0 => Ok(()),
-        _ => Err(unsafe { c::get_bis_error() }),
-    }
-}
-
-pub fn insert_input<T: Into<Vec<u8>>>(input: T) -> StrResult<()> {
-    let cstr = match CString::new(input) {
-        Ok(s) => s,
-        Err(e) => return errs!(e, "Failed to create CString"),
-    };
-
-    match unsafe { c::bis_insert_input(cstr.as_ptr()) } {
-        0 => {}
-        _ => return Err(unsafe { c::get_bis_error() }),
-    }
-
-    // return success
-    Ok(())
 }
 
 pub fn get_terminal_size() -> StrResult<(u16, u16)> {

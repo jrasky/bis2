@@ -32,21 +32,11 @@ use serde_json;
 
 use flx::{SearchBase, LineInfo};
 use error::{StrError, StrResult};
-use bis_c;
 
 use types::*;
 use constants::*;
 
 pub fn start_threads(emit: Sender<Event>) -> StrResult<(JoinHandle<()>, Arc<AtomicBool>)> {
-    // mask sigint
-    trys!(bis_c::mask_sigint(), "Failed to mask SIGINT");
-
-    // start the sigint thread
-    let signal_emit = emit.clone();
-    thread::spawn(move || {
-        read_signals(signal_emit);
-    });
-
     // start reading completions
     let completions_emit = emit.clone();
     thread::spawn(move || {
@@ -270,17 +260,6 @@ fn read_input(emit: Sender<Event>, stop: Arc<AtomicBool>) {
             break;
         }
     }
-}
-
-fn read_signals(emit: Sender<Event>) {
-    // wait for a sigint
-    trysp!(bis_c::wait_sigint(), "Failed to wait for sigint");
-
-    debug!("Caught sigint");
-
-    // send a quit signal
-    let _ = emit.send(Event::Quit(false));
-    // might happen after events is closed, so don't fail
 }
 
 pub fn start_query(emit: Sender<Event>, base: Arc<SearchBase>, query: Arc<String>) {

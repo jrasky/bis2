@@ -5,12 +5,6 @@ Uses [flx](https://github.com/jrasky/flx)
 
 Use a keybind in bash to replace the readline search:
 ```bash
-# add a keybind for bis
-bind '"\C-r":"bis2\n"'
-```
-
-For a better integration, compile with the `no_ioctl` feature, and install a keybind like the following:
-```bash
 # function to interact with readline variables
 function bis2_integration {
   { READLINE_LINE=$(</dev/tty bis2 2>&1 1>&$bis2out); } {bis2out}>&1

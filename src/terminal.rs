@@ -43,8 +43,6 @@ impl Terminal {
 
         trys!(prepare_terminal(), "Failed to prepare terminal");
 
-        trys!(mask_sigint(), "Failed to mask sigint");
-
         let (rows, cols) = trys!(get_terminal_size(), "Failed to get terminal size");
 
         Ok(Terminal {
@@ -73,10 +71,6 @@ impl Terminal {
     }
 
     pub fn insert_input<T: AsRef<str>>(&mut self, input: T) -> StrResult<()> {
-        if cfg!(feature = "no_ioctl") {
-            Ok(trys!(write!(self.error, "{}", input.as_ref()), "Failed to write to stderr"))
-        } else {
-            Ok(trys!(insert_input(input.as_ref()), "Failed to insert input"))
-        }
+        Ok(trys!(write!(self.error, "{}", input.as_ref()), "Failed to write to stderr"))
     }
 }
