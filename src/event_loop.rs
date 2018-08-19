@@ -26,6 +26,7 @@ use std::thread;
 
 use terminal::Terminal;
 use flx::SearchBase;
+use dirs;
 use threads;
 use serde_json;
 
@@ -241,7 +242,7 @@ impl EventLoop {
                                 completions.add_completion(m.get().clone(), path);
 
                                 // try to save them
-                                let mut completions_path = env::home_dir().unwrap_or("".into());
+                                let mut completions_path = dirs::home_dir().unwrap_or("".into());
                                 completions_path.push(".bis2_completions");
 
                                 trace!("Completions path: {:?}", completions_path);

@@ -29,6 +29,7 @@ use std::thread;
 use serde_json;
 
 use flx::{SearchBase, LineInfo};
+use dirs;
 
 use types::*;
 use constants::*;
@@ -49,7 +50,7 @@ pub fn start_threads(emit: Sender<Event>) -> (JoinHandle<()>, Arc<AtomicBool>) {
 }
 
 fn read_completions(emit: Sender<Event>) {
-    let mut completions_path = env::home_dir().unwrap_or("".into());
+    let mut completions_path = dirs::home_dir().unwrap_or("".into());
     completions_path.push(".bis2_completions");
 
     trace!("Completions path: {:?}", completions_path);
@@ -74,7 +75,7 @@ pub fn read_history(completions: MutexGuard<Completions>, emit: Sender<Event>) {
         Ok(path) => path.into(),
         Err(env::VarError::NotPresent) => {
             debug!("History file not found, defaulting to ~/.bash_history");
-            let mut home = env::home_dir().unwrap_or("".into());
+            let mut home = dirs::home_dir().unwrap_or("".into());
             home.push(".bash_history");
             home
         },

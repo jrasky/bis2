@@ -1,5 +1,7 @@
 extern crate gcc;
 
 fn main() {
-    gcc::compile_library("libbis_c.a", &["src/bis_c.c"]);
+    gcc::Build::new()
+        .file("src/bis_c.c")
+        .compile("libbis_c.a");
 }

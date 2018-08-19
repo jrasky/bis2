@@ -22,6 +22,7 @@ extern crate flx;
 extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
+extern crate dirs;
 
 use std::mem;
 
@@ -37,7 +38,7 @@ mod event_loop;
 
 fn main() {
     // init logging
-    env_logger::init().expect("Failed to initialize logging");
+    env_logger::init();
 
     // create the event loop
     let mut ev_loop = EventLoop::create();

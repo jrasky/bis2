@@ -1,21 +1,22 @@
 [package]
 name = "bis2"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Jerome Rasky <jyrome.112@gmail.com>"]
 links = "bis_c"
 build = "build.rs"
 
 [dependencies]
-libc = "*"
-unicode-width = "*"
-term = "*"
-log = "*"
-env_logger = "*"
-threadpool = "*"
-flx = "*"
-serde = "*"
-serde_json = "*"
-serde_derive = "*"
+libc = "0.2.43"
+unicode-width = "0.1.5"
+term = "0.5.1"
+log = "0.4.4"
+env_logger = "0.5.12"
+threadpool = "1.7.1"
+flx = "0.2.2"
+serde = "1.0.71"
+serde_json = "1.0.26"
+serde_derive = "1.0.71"
+dirs = "1.0.3"
 
 [build-dependencies]
-gcc = "*"
+gcc = "0.3.54"
